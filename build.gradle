@@ -1,0 +1,38 @@
+plugins {
+    id 'java-gradle-plugin'
+}
+
+group = 'name.jurgenei.gradle'
+version = '0.1.0-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+    gradlePluginPortal()
+}
+
+dependencies {
+    testImplementation gradleTestKit()
+    testImplementation 'junit:junit:4.13.2'
+}
+
+gradlePlugin {
+    plugins {
+        sqlxmlast {
+            id = 'sqlxmlast'
+            implementationClass = 'name.jurgenei.gradle.antlr.XmlAstPlugin'
+            displayName = 'SQL XML AST plugin'
+            description = 'Converts source files to XML AST using pluggable ANTLR grammars.'
+        }
+    }
+}
+
+tasks.withType(Test).configureEach {
+    useJUnit()
+}
+

@@ -22,7 +22,7 @@ public class GrammarCatalogLoaderTest {
 
         Files.writeString(catalog.toPath(), """
                 <catalog>
-                  <grammar name="plsql" runtimeGrammar="oracle" parser="%s" lexer="%s"/>
+                  <grammar name="plsql" runtimeGrammar="oracle" parser="%s" lexer="%s" start-rule="script"/>
                 </catalog>
                 """.formatted(parser.getName(), lexer.getName()), StandardCharsets.UTF_8);
 
@@ -30,6 +30,7 @@ public class GrammarCatalogLoaderTest {
         final GrammarCatalogEntry entry = loader.load(catalog).require("plsql");
 
         Assert.assertEquals("oracle", entry.resolveRuntimeGrammar());
+        Assert.assertEquals("script", entry.getStartRule());
         Assert.assertEquals(parser.toPath().toAbsolutePath().normalize(), entry.resolveParserPath(catalog.toPath().getParent()));
         Assert.assertEquals(lexer.toPath().toAbsolutePath().normalize(), entry.resolveLexerPath(catalog.toPath().getParent()));
     }
@@ -39,8 +40,20 @@ public class GrammarCatalogLoaderTest {
         final File catalog = temporaryFolder.newFile("duplicate.xml");
         Files.writeString(catalog.toPath(), """
                 <catalog>
+                  <grammar name="plsql" parser="a.g4" lexer="b.g4" start-rule="script"/>
+                  <grammar name="plsql" parser="c.g4" lexer="d.g4" start-rule="script"/>
+                </catalog>
+                """, StandardCharsets.UTF_8);
+
+        new GrammarCatalogLoader().load(catalog);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void requiresStartRuleAttribute() throws Exception {
+        final File catalog = temporaryFolder.newFile("missing-start-rule.xml");
+        Files.writeString(catalog.toPath(), """
+                <catalog>
                   <grammar name="plsql" parser="a.g4" lexer="b.g4"/>
-                  <grammar name="plsql" parser="c.g4" lexer="d.g4"/>
                 </catalog>
                 """, StandardCharsets.UTF_8);
 

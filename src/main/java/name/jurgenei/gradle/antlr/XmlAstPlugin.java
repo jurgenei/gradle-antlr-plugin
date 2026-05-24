@@ -7,10 +7,10 @@ import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.SourceSetContainer;
 
 /**
- * Registers sqlxmlast Gradle tasks and wires them to the Java runtime classpath.
+ * Registers xmlast Gradle tasks and wires them to the Java runtime classpath.
  *
- * <p>The plugin exposes a default {@code sqlxmlast} task using {@link XmlAstGradleTask}
- * and also configures all SqlXmlAst task types to depend on {@code classes}, ensuring
+ * <p>The plugin exposes a default {@code xmlast} task using {@link XmlAstGradleTask}
+ * and also configures all XmlAst task types to depend on {@code classes}, ensuring
  * converter classes are available before conversion starts.</p>
  */
 public class XmlAstPlugin implements Plugin<Project> {
@@ -26,8 +26,8 @@ public class XmlAstPlugin implements Plugin<Project> {
         final SourceSetContainer sourceSets = javaPluginExtension.getSourceSets();
         final SourceSet mainSourceSet = sourceSets.getByName(SourceSet.MAIN_SOURCE_SET_NAME);
 
-        project.getTasks().register("sqlxmlast", XmlAstGradleTask.class, task -> {
-            task.setGroup("sqlxmlast");
+        project.getTasks().register("xmlast", XmlAstGradleTask.class, task -> {
+            task.setGroup("xmlast");
             task.setDescription("Convert SQL file trees to XML AST output.");
             task.getRuntimeClasspath().from(mainSourceSet.getRuntimeClasspath());
         });
@@ -43,4 +43,3 @@ public class XmlAstPlugin implements Plugin<Project> {
         });
     }
 }
-

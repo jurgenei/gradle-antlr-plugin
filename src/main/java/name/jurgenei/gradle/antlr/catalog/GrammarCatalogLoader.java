@@ -13,10 +13,17 @@ import java.util.Map;
 
 /**
  * Loads XML grammar catalogs with entries such as:
- * {@code <grammar name="plsql" runtimeGrammar="oracle" parser="..." lexer="..."/>}.
+ * {@code <grammar name="plsql" runtimeGrammar="oracle" parser="..." lexer="..." start-rule="script"/>}.
  */
 public final class GrammarCatalogLoader {
 
+    /**
+     * Loads and validates a grammar catalog file.
+     *
+     * @param file catalog XML file.
+     * @return parsed catalog.
+     * @throws IllegalArgumentException when XML is invalid or required attributes are missing.
+     */
     public GrammarCatalog load(final File file) {
         if (file == null || !file.isFile()) {
             throw new IllegalArgumentException("Catalog file must exist: " + file);
@@ -43,9 +50,10 @@ public final class GrammarCatalogLoader {
             final String name = requireAttribute(grammarElement, "name");
             final String parser = requireAttribute(grammarElement, "parser");
             final String lexer = requireAttribute(grammarElement, "lexer");
+            final String startRule = requireAttribute(grammarElement, "start-rule");
             final String runtimeGrammar = optionalAttribute(grammarElement, "runtimeGrammar");
 
-            final GrammarCatalogEntry entry = new GrammarCatalogEntry(name, runtimeGrammar, parser, lexer);
+            final GrammarCatalogEntry entry = new GrammarCatalogEntry(name, runtimeGrammar, parser, lexer, startRule);
             // Resolve eagerly so malformed path/URL values fail at configuration time.
             entry.resolveParserUri(baseDirectory);
             entry.resolveLexerUri(baseDirectory);

@@ -20,7 +20,6 @@ import org.gradle.api.tasks.TaskAction;
 
 import javax.inject.Inject;
 import java.io.File;
-import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.FileSystems;
@@ -30,21 +29,18 @@ import java.nio.file.PathMatcher;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Native Gradle-style task with explicit source/destination properties while preserving
- * SqlXmlAstAntTask-compatible behavior for grammar selection and file mapping.
+ * Native Gradle-style task with explicit source/destination properties.
  *
  * <p>This task is intended as the primary Gradle-facing API. It supports include/exclude
  * patterns, incremental conversion checks, configurable execution model, and explicit
- * runtime classpath injection for configuration-cache-friendly execution.</p>
+ * runtime classpath injection for configuration-cache-friendly execution. Parsing is executed
+ * through dynamically loaded ANTLR lexer/parser classes.</p>
  */
 public abstract class XmlAstGradleTask extends DefaultTask {
-
-    private static final String CONVERTER_CLASS = "name.jurgenei.parsers.ToAstBatchConverter";
 
     private final DirectoryProperty sourceDirectory;
     private final DirectoryProperty destinationDirectory;
@@ -59,6 +55,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     private final Property<Boolean> failOnTransformationError;
     private final RegularFileProperty catalogFile;
     private final Property<String> catalogGrammar;
+    private final Property<String> parserClassName;
+    private final Property<String> lexerClassName;
+    private final Property<String> startRule;
     private final ConfigurableFileCollection runtimeClasspath;
 
     @Inject
@@ -76,10 +75,13 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         failOnTransformationError = objects.property(Boolean.class).convention(true);
         catalogFile = objects.fileProperty();
         catalogGrammar = objects.property(String.class);
+        parserClassName = objects.property(String.class);
+        lexerClassName = objects.property(String.class);
+        startRule = objects.property(String.class).convention("script");
         runtimeClasspath = objects.fileCollection();
 
         sourceDirectory.convention(getProject().getLayout().getProjectDirectory().dir("src/main/sql"));
-        destinationDirectory.convention(getProject().getLayout().getProjectDirectory().dir("target/sqlxmlast"));
+        destinationDirectory.convention(getProject().getLayout().getProjectDirectory().dir("target/xmlast"));
     }
 
     /**
@@ -105,6 +107,8 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     /**
      * Grammar key used by {@code SqlXmlConverter} (e.g. oracle, sybase, java8, antlr4).
      *
+     * <p>Retained for compatibility with existing builds and catalog metadata.</p>
+     *
      * @return grammar property.
      */
     @Input
@@ -123,7 +127,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     }
 
     /**
-     * Max worker count when the selected execution model is parallel.
+     * Max worker count setting retained for compatibility.
      *
      * @return parallelism property.
      */
@@ -133,7 +137,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     }
 
     /**
-     * Batch execution model (SEQUENTIAL, PLATFORM_THREADS, VIRTUAL_THREADS).
+     * Execution model setting retained for compatibility.
      *
      * @return execution model property.
      */
@@ -215,6 +219,38 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     }
 
     /**
+     * Optional fully-qualified parser class used for dynamic ANTLR parsing.
+     *
+     * @return parser class property.
+     */
+    @Optional
+    @Input
+    public Property<String> getParserClassName() {
+        return parserClassName;
+    }
+
+    /**
+     * Optional fully-qualified lexer class used for dynamic ANTLR parsing.
+     *
+     * @return lexer class property.
+     */
+    @Optional
+    @Input
+    public Property<String> getLexerClassName() {
+        return lexerClassName;
+    }
+
+    /**
+     * Parser entry rule method invoked during dynamic parsing.
+     *
+     * @return start rule property.
+     */
+    @Input
+    public Property<String> getStartRule() {
+        return startRule;
+    }
+
+    /**
      * Runtime classpath used to load converter classes and dependencies.
      *
      * @return classpath file collection.
@@ -227,9 +263,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     /**
      * Runs conversion for all selected files from source directory to destination directory.
      *
-     * <p>When {@code force=false}, files are converted only if missing or out-of-date.
-     * Conversion delegates to {@code SqlXmlAstBatchConverter} to preserve mapping and
-     * grammar behavior with the existing Ant integration.</p>
+     * <p>When {@code force=false}, files are converted only if missing or out-of-date.</p>
      */
     @TaskAction
     public void convert() {
@@ -241,7 +275,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         final List<File> selectedFiles = selectSourceFiles(sourceDir.toPath(), includes.get(), excludes.get());
         final File destinationDir = destinationDirectory.get().getAsFile();
         final List<File> jobs = applyUpToDateCheck(sourceDir.toPath(), destinationDir.toPath(), selectedFiles);
-        final String selectedGrammar = resolveEffectiveGrammar();
+        final ResolvedParserConfig resolvedConfig = resolveEffectiveConfig();
 
         if (jobs.isEmpty()) {
             getLogger().info("No files selected for conversion in {}", sourceDir);
@@ -251,18 +285,17 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         final List<String> failures = new ArrayList<>();
 
         try (URLClassLoader classLoader = createRuntimeClassLoader()) {
-            final Class<?> converterClass = classLoader.loadClass(CONVERTER_CLASS);
-            final Object converter = converterClass.getDeclaredConstructor().newInstance();
-            converterClass.getMethod("setGrammar", String.class).invoke(converter, selectedGrammar);
-            converterClass.getMethod("setTargetExtension", String.class).invoke(converter, targetExtension.get());
-            converterClass.getMethod("setParallelism", int.class).invoke(converter, parallelism.get());
-            converterClass.getMethod("setExecutionModel", String.class)
-                    .invoke(converter, executionModel.get().toUpperCase(Locale.ROOT));
-
-            final Method convertMethod = converterClass.getMethod("convertFileTree", File.class, List.class, File.class);
-            convertMethod.invoke(converter, sourceDir, jobs, destinationDir);
+            new DynamicAntlrXmlAstConverter().convertFileTree(
+                    sourceDir,
+                    jobs,
+                    destinationDir,
+                    targetExtension.get(),
+                    classLoader,
+                    resolvedConfig.lexerClassName(),
+                    resolvedConfig.parserClassName(),
+                    resolvedConfig.startRule());
         } catch (Exception ex) {
-            final String message = "sqlxmlast conversion failed: " + ex.getMessage();
+            final String message = "xmlast conversion failed: " + ex.getMessage();
             if (failOnError.get() && failOnTransformationError.get()) {
                 throw new GradleException(message, ex);
             }
@@ -275,9 +308,16 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         }
     }
 
-    private String resolveEffectiveGrammar() {
+    private ResolvedParserConfig resolveEffectiveConfig() {
+        String resolvedParser = parserClassName.getOrNull();
+        String resolvedLexer = lexerClassName.getOrNull();
+        String resolvedStartRule = startRule.get();
+
         if (!catalogFile.isPresent()) {
-            return grammar.get();
+            if (resolvedParser == null || resolvedParser.isBlank() || resolvedLexer == null || resolvedLexer.isBlank()) {
+                throw new GradleException("parserClassName and lexerClassName are required when catalogFile is not configured");
+            }
+            return new ResolvedParserConfig(resolvedParser, resolvedLexer, resolvedStartRule);
         }
 
         if (!catalogGrammar.isPresent() || catalogGrammar.get().isBlank()) {
@@ -286,13 +326,25 @@ public abstract class XmlAstGradleTask extends DefaultTask {
 
         final GrammarCatalogLoader loader = new GrammarCatalogLoader();
         final GrammarCatalogEntry entry = loader.load(catalogFile.get().getAsFile()).require(catalogGrammar.get());
+        if (resolvedParser == null || resolvedParser.isBlank()) {
+            resolvedParser = entry.getParser();
+        }
+        if (resolvedLexer == null || resolvedLexer.isBlank()) {
+            resolvedLexer = entry.getLexer();
+        }
+        resolvedStartRule = entry.getStartRule();
+
         getLogger().info(
-                "Resolved catalog grammar '{}' -> runtimeGrammar='{}' (parser={}, lexer={})",
+                "Resolved catalog grammar '{}' (runtimeGrammar='{}') -> parser={}, lexer={}, startRule={}",
                 entry.getName(),
                 entry.resolveRuntimeGrammar(),
-                entry.getParser(),
-                entry.getLexer());
-        return entry.resolveRuntimeGrammar();
+                resolvedParser,
+                resolvedLexer,
+                resolvedStartRule);
+        return new ResolvedParserConfig(resolvedParser, resolvedLexer, resolvedStartRule);
+    }
+
+    private record ResolvedParserConfig(String parserClassName, String lexerClassName, String startRule) {
     }
 
     private List<File> selectSourceFiles(

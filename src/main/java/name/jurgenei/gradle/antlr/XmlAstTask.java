@@ -54,6 +54,7 @@ public abstract class XmlAstTask extends DefaultTask {
     private final Property<String> parserClassName;
     private final Property<String> lexerClassName;
     private final Property<String> startRule;
+    private final Property<Boolean> compression;
     private final ConfigurableFileCollection runtimeClasspath;
 
     @Inject
@@ -70,6 +71,7 @@ public abstract class XmlAstTask extends DefaultTask {
         parserClassName = objects.property(String.class);
         lexerClassName = objects.property(String.class);
         startRule = objects.property(String.class).convention("script");
+        compression = objects.property(Boolean.class).convention(false);
         runtimeClasspath = objects.fileCollection();
         destinationDirectory.convention(getProject().getLayout().getProjectDirectory().dir("target/xmlast"));
     }
@@ -199,6 +201,16 @@ public abstract class XmlAstTask extends DefaultTask {
     }
 
     /**
+     * Enables rule-chain compression for generated XML AST output.
+     *
+     * @return compression flag property.
+     */
+    @Input
+    public Property<Boolean> getCompression() {
+        return compression;
+    }
+
+    /**
      * Runtime classpath used to load converter/parser dependencies.
      *
      * @return runtime classpath file collection.
@@ -247,7 +259,8 @@ public abstract class XmlAstTask extends DefaultTask {
                             classLoader,
                             resolvedConfig.lexerClassName(),
                             resolvedConfig.parserClassName(),
-                            resolvedConfig.startRule());
+                            resolvedConfig.startRule(),
+                            compression.get());
                 }
             }
         } catch (Exception ex) {

@@ -58,6 +58,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     private final Property<String> parserClassName;
     private final Property<String> lexerClassName;
     private final Property<String> startRule;
+    private final Property<Boolean> compression;
     private final ConfigurableFileCollection runtimeClasspath;
 
     @Inject
@@ -78,6 +79,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         parserClassName = objects.property(String.class);
         lexerClassName = objects.property(String.class);
         startRule = objects.property(String.class).convention("script");
+        compression = objects.property(Boolean.class).convention(false);
         runtimeClasspath = objects.fileCollection();
 
         sourceDirectory.convention(getProject().getLayout().getProjectDirectory().dir("src/main/sql"));
@@ -251,6 +253,16 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     }
 
     /**
+     * Enables rule-chain compression for generated XML AST output.
+     *
+     * @return compression flag property.
+     */
+    @Input
+    public Property<Boolean> getCompression() {
+        return compression;
+    }
+
+    /**
      * Runtime classpath used to load converter classes and dependencies.
      *
      * @return classpath file collection.
@@ -293,7 +305,8 @@ public abstract class XmlAstGradleTask extends DefaultTask {
                     classLoader,
                     resolvedConfig.lexerClassName(),
                     resolvedConfig.parserClassName(),
-                    resolvedConfig.startRule());
+                    resolvedConfig.startRule(),
+                    compression.get());
         } catch (Exception ex) {
             final String message = "xmlast conversion failed: " + ex.getMessage();
             if (failOnError.get() && failOnTransformationError.get()) {

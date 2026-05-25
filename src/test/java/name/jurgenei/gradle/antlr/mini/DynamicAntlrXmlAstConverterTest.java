@@ -37,7 +37,8 @@ public class DynamicAntlrXmlAstConverterTest {
                 MiniLexer.class.getClassLoader(),
                 MiniLexer.class.getName(),
                 MiniParser.class.getName(),
-                "script");
+                "script",
+                false);
 
         for (Path sourcePath : listSqlFiles(VALID_DIR)) {
             final String fileName = sourcePath.getFileName().toString();
@@ -49,6 +50,29 @@ public class DynamicAntlrXmlAstConverterTest {
             Assert.assertTrue("Expected <ast root element in " + xmlName, xml.contains("<ast"));
             Assert.assertTrue("Expected script rule in " + xmlName, xml.contains("name=\"script\""));
         }
+    }
+
+    @Test
+    public void emitsPathIndexWhenCompressionEnabled() throws Exception {
+        final File outputDir = temporaryFolder.newFolder("xml-ast-compressed");
+        final List<File> inputs = List.of(VALID_DIR.resolve("01_select_star.sql").toFile());
+
+        new DynamicAntlrXmlAstConverter().convertFileTree(
+                VALID_DIR.toFile(),
+                inputs,
+                outputDir,
+                ".xml",
+                MiniLexer.class.getClassLoader(),
+                MiniLexer.class.getName(),
+                MiniParser.class.getName(),
+                "script",
+                true);
+
+        final Path xmlPath = outputDir.toPath().resolve("01_select_star.xml");
+        Assert.assertTrue("Expected XML output", Files.exists(xmlPath));
+        final String xml = Files.readString(xmlPath, StandardCharsets.UTF_8);
+        Assert.assertTrue("Expected pathIndex section", xml.contains("<pathIndex>"));
+        Assert.assertTrue("Expected compressed path id attribute", xml.contains("pathId=\""));
     }
 
     @Test(expected = GradleException.class)
@@ -64,7 +88,8 @@ public class DynamicAntlrXmlAstConverterTest {
                 MiniLexer.class.getClassLoader(),
                 MiniLexer.class.getName(),
                 MiniParser.class.getName(),
-                "script");
+                "script",
+                false);
     }
 
     private static List<Path> listSqlFiles(final Path directory) throws Exception {

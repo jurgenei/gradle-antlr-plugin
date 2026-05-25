@@ -5,6 +5,7 @@
 ![ANTLR](https://img.shields.io/badge/ANTLR-4.13.x-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Status](https://img.shields.io/badge/status-active-success)
+[![CI](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/ci.yml)
 
 Gradle plugin for converting SQL source trees into XML AST files using dynamic ANTLR parser/lexer loading.
 

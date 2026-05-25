@@ -1,5 +1,6 @@
 package name.jurgenei.gradle.antlr;
 
+import com.sun.net.httpserver.HttpServer;
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
 import org.junit.Assert;
@@ -8,6 +9,7 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -276,6 +278,130 @@ public class XmlAstPluginFunctionalTest {
         final String xml = Files.readString(output, StandardCharsets.UTF_8);
         Assert.assertTrue("Expected ast root", xml.contains("<ast"));
         Assert.assertTrue("Expected catalog start rule", xml.contains("name=\"root\""));
+    }
+
+    @Test
+    public void convertsUsingCatalogRemoteGrammarUrlsWithoutProtocolAndSuperClasses() throws Exception {
+        final File projectDir = temporaryFolder.newFolder("functional-catalog-remote-superclass");
+        writeSettings(projectDir);
+        writeBuildFile(projectDir, """
+                plugins {
+                    id 'java'
+                    id 'xmlast'
+                }
+
+                repositories {
+                    mavenCentral()
+                }
+
+                dependencies {
+                    implementation 'org.antlr:antlr4:4.13.1'
+                    implementation 'org.antlr:antlr4-runtime:4.13.1'
+                }
+
+                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                    sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
+                    destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
+                    catalogFile.set(layout.projectDirectory.file('catalog.xml'))
+                    catalogGrammar.set('mini')
+                    targetExtension.set('.xml')
+                }
+                """);
+
+        writeFile(projectDir, "src/main/java/e2e/MyLexerBase.java", """
+                package e2e;
+
+                import org.antlr.v4.runtime.CharStream;
+                import org.antlr.v4.runtime.Lexer;
+
+                public abstract class MyLexerBase extends Lexer {
+                    protected MyLexerBase(final CharStream input) {
+                        super(input);
+                    }
+                }
+                """);
+
+        writeFile(projectDir, "src/main/java/e2e/MyParserBase.java", """
+                package e2e;
+
+                import org.antlr.v4.runtime.Parser;
+                import org.antlr.v4.runtime.TokenStream;
+
+                public abstract class MyParserBase extends Parser {
+                    protected MyParserBase(final TokenStream input) {
+                        super(input);
+                    }
+                }
+                """);
+
+        final File grammarDir = temporaryFolder.newFolder("remote-mini-grammars");
+        Files.writeString(grammarDir.toPath().resolve("MiniLexer.g4"), """
+                lexer grammar MiniLexer;
+
+                options { superClass = e2e.MyLexerBase; }
+
+                SELECT: 'SELECT';
+                FROM: 'FROM';
+                STAR: '*';
+                SEMI: ';';
+                IDENTIFIER: [a-zA-Z_] [a-zA-Z_0-9]*;
+                WS: [ \\t\\r\\n]+ -> skip;
+                """, StandardCharsets.UTF_8);
+
+        Files.writeString(grammarDir.toPath().resolve("MiniParser.g4"), """
+                parser grammar MiniParser;
+                options {
+                    tokenVocab=MiniLexer;
+                    superClass=e2e.MyParserBase;
+                }
+
+                root: SELECT STAR FROM IDENTIFIER SEMI EOF;
+                """, StandardCharsets.UTF_8);
+
+        final HttpServer server = startStaticServer(grammarDir.toPath());
+        try {
+            final int port = server.getAddress().getPort();
+            writeFile(projectDir, "catalog.xml", """
+                    <catalog>
+                      <grammar name="mini" runtimeGrammar="oracle" parser="localhost:%d/MiniParser.g4" lexer="localhost:%d/MiniLexer.g4" start-rule="root"/>
+                    </catalog>
+                    """.formatted(port, port));
+
+            writeFile(projectDir, "src/main/sql/sample.sql", "SELECT * FROM employees;");
+
+            final BuildResult result = run(projectDir, "xmlast", "--stacktrace");
+            Assert.assertTrue("Expected xmlast task success", result.getOutput().contains("BUILD SUCCESSFUL"));
+
+            final Path output = projectDir.toPath().resolve("build/xmlast/sample.xml");
+            Assert.assertTrue("Expected generated XML file", Files.exists(output));
+            final String xml = Files.readString(output, StandardCharsets.UTF_8);
+            Assert.assertTrue("Expected ast root", xml.contains("<ast"));
+            Assert.assertTrue("Expected catalog start rule", xml.contains("name=\"root\""));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    private static HttpServer startStaticServer(final Path rootDirectory) throws IOException {
+        final HttpServer server = HttpServer.create(new java.net.InetSocketAddress("localhost", 0), 0);
+        server.createContext("/", exchange -> {
+            final String rawPath = exchange.getRequestURI().getPath();
+            final String relative = rawPath.startsWith("/") ? rawPath.substring(1) : rawPath;
+            final Path target = rootDirectory.resolve(relative).normalize();
+            if (!target.startsWith(rootDirectory) || !Files.isRegularFile(target)) {
+                exchange.sendResponseHeaders(404, -1);
+                exchange.close();
+                return;
+            }
+
+            final byte[] bytes = Files.readAllBytes(target);
+            exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        return server;
     }
 
     private static BuildResult run(final File projectDir, final String... args) {

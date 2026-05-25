@@ -14,9 +14,10 @@ Gradle plugin for converting SQL source trees into XML AST files using dynamic A
 - default task: `xmlast` (`XmlAstGradleTask`)
 - legacy task type: `XmlAstTask`
 - dynamic runtime parser mode:
-  - `parserClassName`
-  - `lexerClassName`
+  - `parserClassName` (class name or `.g4` coordinate)
+  - `lexerClassName` (class name or `.g4` coordinate)
   - `startRule`
+  - `compression`
 - catalog support (`catalog.xml`) with required attributes:
   - `name`
   - `parser`
@@ -64,10 +65,11 @@ tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
     sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
     destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
 
-    // still required in dynamic mode to load generated classes
+    // Class-name mode.
     parserClassName.set('com.example.sql.MySqlParser')
     lexerClassName.set('com.example.sql.MySqlLexer')
     startRule.set('script')
+    compression.set(false)
 
     includes.set(['**/*.sql'])
     targetExtension.set('.xml')
@@ -118,6 +120,57 @@ When catalog is configured, the selected entry can override:
 The selected catalog entry also provides default parser/lexer class names when
 `parserClassName` / `lexerClassName` are not set directly on the task.
 
+Catalog parser/lexer coordinates can also point to grammar sources (`.g4`), including:
+
+- local file paths
+- `file:` URIs
+- `http(s)` URLs
+- protocol-less host paths (for example `localhost:8080/MiniParser.g4`)
+
+When `.g4` coordinates are used, the plugin generates and compiles parser/lexer classes at runtime.
+
+## Runtime Grammar Source Mode (`.g4`)
+
+You can point task properties directly to grammar sources:
+
+```groovy
+tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+    sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
+    destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
+
+    // Grammar-source mode.
+    parserClassName.set('localhost:8080/MiniParser.g4')
+    lexerClassName.set('localhost:8080/MiniLexer.g4')
+    startRule.set('root')
+
+    // Required so runtime compilation can resolve ANTLR + custom superclasses.
+    runtimeClasspath.from(sourceSets.main.runtimeClasspath)
+}
+```
+
+### `superClass` support in grammars
+
+Runtime generation supports lexer and parser superclasses, for example:
+
+```antlr
+lexer grammar ANTLRv4Lexer;
+
+options {
+  superClass = name.jurgenei.parsers.LexerAdaptor;
+}
+```
+
+```antlr
+parser grammar ANTLRv4Parser;
+
+options {
+  tokenVocab = ANTLRv4Lexer;
+  superClass = name.jurgenei.parsers.ParserBase;
+}
+```
+
+Superclass types must be available on `runtimeClasspath`.
+
 ## Task Types
 
 ### `XmlAstGradleTask` (recommended)
@@ -132,6 +185,7 @@ Main properties:
 - `failOnError`
 - `failOnTransformationError`
 - `parserClassName` / `lexerClassName` / `startRule`
+- `compression`
 - `catalogFile` / `catalogGrammar`
 - `runtimeClasspath`
 
@@ -144,6 +198,7 @@ Main properties:
 - `includes`
 - `targetExtension`
 - `parserClassName` / `lexerClassName` / `startRule`
+- `compression`
 - `catalogFile` / `catalogGrammar`
 - `runtimeClasspath`
 
@@ -175,6 +230,10 @@ Run a specific functional test:
 - `ClassNotFoundException` for parser/lexer classes:
   - ensure grammar generation and compilation run before `xmlast`.
   - verify `runtimeClasspath` includes generated class directories and ANTLR runtime.
+- task fails when using catalog URL/`.g4` coordinates:
+  - parser and lexer must both be `.g4` coordinates (or both class names).
+  - for `localhost:port/...` coordinates, ensure the local server is reachable during task execution.
+  - ensure `runtimeClasspath` includes required superclass types if grammars use `options { superClass = ...; }`.
 - `NoSuchMethodException` for start rule:
   - verify `startRule` matches an actual parser entry method (e.g. `script`, `grammarSpec`).
   - if using catalog, confirm `start-rule` is present and correct.

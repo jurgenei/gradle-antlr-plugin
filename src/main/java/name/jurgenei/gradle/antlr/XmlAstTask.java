@@ -169,7 +169,14 @@ public abstract class XmlAstTask extends DefaultTask {
     }
 
     /**
-     * Optional fully-qualified parser class for dynamic ANTLR mode.
+     * Optional parser coordinate for dynamic ANTLR mode.
+     *
+     * <p>Supported values:</p>
+     * <ul>
+     *   <li>fully-qualified parser class name</li>
+     *   <li>grammar source coordinate (`.g4`) as local path, file URI, HTTP(S) URL,
+     *       protocol-relative URL, or host/path without protocol</li>
+     * </ul>
      *
      * @return parser class property.
      */
@@ -180,7 +187,9 @@ public abstract class XmlAstTask extends DefaultTask {
     }
 
     /**
-     * Optional fully-qualified lexer class for dynamic ANTLR mode.
+     * Optional lexer coordinate for dynamic ANTLR mode.
+     *
+     * <p>Supported values mirror {@link #getParserClassName()}.</p>
      *
      * @return lexer class property.
      */
@@ -202,6 +211,10 @@ public abstract class XmlAstTask extends DefaultTask {
 
     /**
      * Enables rule-chain compression for generated XML AST output.
+     *
+     * <p>When enabled, single-child `<rule>` chains of length {@code >= 2} are flattened,
+     * the chain head receives a `pathId` attribute, and a `<pathIndex>` section is appended
+     * to the AST root with `id -> path` mappings.</p>
      *
      * @return compression flag property.
      */
@@ -287,10 +300,10 @@ public abstract class XmlAstTask extends DefaultTask {
         final GrammarCatalogLoader loader = new GrammarCatalogLoader();
         final GrammarCatalogEntry entry = loader.load(catalogFile.get().getAsFile()).require(catalogGrammar.get());
         if (resolvedParser == null || resolvedParser.isBlank()) {
-            resolvedParser = entry.getParser();
+            resolvedParser = resolveCatalogCoordinate(entry.getParser(), true);
         }
         if (resolvedLexer == null || resolvedLexer.isBlank()) {
-            resolvedLexer = entry.getLexer();
+            resolvedLexer = resolveCatalogCoordinate(entry.getLexer(), false);
         }
         resolvedStartRule = entry.getStartRule();
 
@@ -305,6 +318,26 @@ public abstract class XmlAstTask extends DefaultTask {
     }
 
     private record ResolvedParserConfig(String parserClassName, String lexerClassName, String startRule) {
+    }
+
+    private String resolveCatalogCoordinate(final String value, final boolean parser) {
+        if (!looksLikeGrammarCoordinate(value)) {
+            return value;
+        }
+        final Path baseDirectory = catalogFile.get().getAsFile().toPath().toAbsolutePath().getParent();
+        final GrammarCatalogLoader loader = new GrammarCatalogLoader();
+        final GrammarCatalogEntry entry = loader.load(catalogFile.get().getAsFile()).require(catalogGrammar.get());
+        return (parser ? entry.resolveParserUri(baseDirectory) : entry.resolveLexerUri(baseDirectory)).toString();
+    }
+
+    private boolean looksLikeGrammarCoordinate(final String value) {
+        final String trimmed = value.trim();
+        return trimmed.endsWith(".g4")
+                || trimmed.startsWith("http://")
+                || trimmed.startsWith("https://")
+                || trimmed.startsWith("file:")
+                || trimmed.startsWith("//")
+                || trimmed.contains("/");
     }
 
     private record ResolvedCatalogConfig(String runtimeGrammar, String startRule) {

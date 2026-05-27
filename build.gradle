@@ -10,7 +10,7 @@ plugins {
 }
 
 group = 'name.jurgenei.gradle'
-version = '0.1.0-SNAPSHOT'
+version = '0.1.0'
 
 java {
     toolchain {
@@ -36,10 +36,10 @@ dependencies {
 
 gradlePlugin {
     plugins {
-        xmlast {
-            id = 'xmlast'
+        antlrPlugin {
+            id = 'name.jurgenei.gradle.antlr'
             implementationClass = 'name.jurgenei.gradle.antlr.XmlAstPlugin'
-            displayName = 'SQL XML AST plugin'
+            displayName = 'Antlr XmlAst plugin'
             description = 'Converts source files to XML AST using pluggable ANTLR grammars.'
         }
     }

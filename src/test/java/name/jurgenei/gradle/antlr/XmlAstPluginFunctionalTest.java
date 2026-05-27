@@ -26,7 +26,7 @@ public class XmlAstPluginFunctionalTest {
         writeBuildFile(projectDir, """
                 plugins {
                     id 'java'
-                    id 'xmlast'
+                    id 'name.jurgenei.gradle.antlr'
                 }
                 """);
 
@@ -42,7 +42,7 @@ public class XmlAstPluginFunctionalTest {
         writeBuildFile(projectDir, """
                 plugins {
                     id 'java'
-                    id 'xmlast'
+                    id 'name.jurgenei.gradle.antlr'
                 }
                 """);
 
@@ -62,7 +62,7 @@ public class XmlAstPluginFunctionalTest {
 
                 plugins {
                     id 'java'
-                    id 'xmlast'
+                    id 'name.jurgenei.gradle.antlr'
                 }
 
                 tasks.register('legacyXmlast', XmlAstTask) {
@@ -91,7 +91,7 @@ public class XmlAstPluginFunctionalTest {
                 plugins {
                     id 'java'
                     id 'antlr'
-                    id 'xmlast'
+                    id 'name.jurgenei.gradle.antlr'
                 }
 
                 repositories {
@@ -156,7 +156,7 @@ public class XmlAstPluginFunctionalTest {
                 plugins {
                     id 'java'
                     id 'antlr'
-                    id 'xmlast'
+                    id 'name.jurgenei.gradle.antlr'
                 }
 
                 repositories {
@@ -217,7 +217,7 @@ public class XmlAstPluginFunctionalTest {
                 plugins {
                     id 'java'
                     id 'antlr'
-                    id 'xmlast'
+                    id 'name.jurgenei.gradle.antlr'
                 }
 
                 repositories {
@@ -287,7 +287,7 @@ public class XmlAstPluginFunctionalTest {
         writeBuildFile(projectDir, """
                 plugins {
                     id 'java'
-                    id 'xmlast'
+                    id 'name.jurgenei.gradle.antlr'
                 }
 
                 repositories {

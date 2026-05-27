@@ -12,6 +12,8 @@ permissions:
 jobs:
   coverage:
     runs-on: ubuntu-latest
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     steps:
       - name: Checkout
@@ -51,15 +53,15 @@ jobs:
           path: build/reports/jacoco/test/html/
 
       - name: Upload coverage to Codecov
-        if: ${{ secrets.CODECOV_TOKEN != '' }}
+        if: ${{ env.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v5
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ env.CODECOV_TOKEN }}
           files: build/reports/jacoco/test/jacocoTestReport.xml
           fail_ci_if_error: false
 
       - name: Codecov token missing notice
-        if: ${{ secrets.CODECOV_TOKEN == '' }}
+        if: ${{ env.CODECOV_TOKEN == '' }}
         run: |
           echo "### Codecov upload skipped" >> "$GITHUB_STEP_SUMMARY"
           echo "- Missing repository secret: CODECOV_TOKEN" >> "$GITHUB_STEP_SUMMARY"

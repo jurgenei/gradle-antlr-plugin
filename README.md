@@ -28,6 +28,23 @@ Gradle plugin for converting SQL source trees into XML AST files using dynamic A
   - `start-rule`
   - optional: `runtimeGrammar` (metadata only)
 
+## Latest Insights (May 2026)
+
+- fail-fast input validation is now enforced in main conversion entry points (`convertFileTree`, `convertFileTreeWithStats`, task execution)
+- runtime conversion flow was refactored into focused internal methods (clearer orchestration, easier maintenance and testing)
+- bounded parallel execution is supported through `executionModel` + `parallelism`
+  - `SEQUENTIAL`
+  - `PLATFORM_THREADS`
+  - `VIRTUAL_THREADS`
+- end-of-run conversion summary includes:
+  - files processed / files with errors / success percentage
+  - estimated sequential time
+  - total time
+  - average time per file
+  - execution profile with speedup multiplier
+- per-file parse output includes duration and size metadata (`<file> <duration>s <lines>:<bytes> parsed`)
+- JaCoCo coverage is integrated in CI with Codecov upload and badge support
+
 ## Requirements
 
 - Java 21+
@@ -114,6 +131,16 @@ Run:
 
 ```bash
 ./gradlew xmlast
+```
+
+Example with bounded parallelism:
+
+```groovy
+tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+    executionModel.set('VIRTUAL_THREADS')
+    parallelism.set(4)
+    continueOnError.set(true)
+}
 ```
 
 ## Catalog Configuration
@@ -216,10 +243,15 @@ Main properties:
 - `includes` / `excludes`
 - `targetExtension`
 - `force`
+- `executionModel` (`SEQUENTIAL`, `PLATFORM_THREADS`, `VIRTUAL_THREADS`)
+- `parallelism`
 - `failOnError`
 - `failOnTransformationError`
+- `continueOnError`
+- `suppressStackTrace`
 - `parserClassName` / `lexerClassName` / `startRule`
 - `compression`
+- `enableDFAMonitoring`
 - `catalogFile` / `catalogGrammar`
 - `runtimeClasspath`
 
@@ -280,6 +312,8 @@ Run a specific functional test:
 ```bash
 ./gradlew xmlast --stacktrace
 ```
+- guard-clause validation failures (for example blank `startRule`, invalid `executionModel`, non-positive `parallelism`):
+  - check task configuration values first; these failures now happen early by design.
 
 ## Status
 

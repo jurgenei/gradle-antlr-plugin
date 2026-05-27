@@ -48,6 +48,22 @@ Coverage report outputs:
 
 CI also publishes coverage summary and uploads JaCoCo XML to Codecov for the badge.
 
+### Codecov Setup (remaining steps)
+
+This project uses **Gradle + JaCoCo** (not `pytest`) and uploads:
+`build/reports/jacoco/test/jacocoTestReport.xml`
+
+1. Open Codecov setup for repo: `https://app.codecov.io/github/jurgenei/gradle-antlr-plugin/new`
+2. In Codecov, copy the repository upload token
+3. In GitHub repo settings, add secret:
+   - `Settings` -> `Secrets and variables` -> `Actions` -> `New repository secret`
+   - Name: `CODECOV_TOKEN`
+   - Value: `<token from Codecov>`
+4. Trigger the `Coverage` workflow (push or re-run)
+5. Verify in workflow summary and Codecov UI that upload succeeds
+
+If `CODECOV_TOKEN` is missing, CI will skip Codecov upload and print a notice in the job summary.
+
 ## Apply Plugin
 
 ```groovy

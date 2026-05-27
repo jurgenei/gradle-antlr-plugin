@@ -6,6 +6,8 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Status](https://img.shields.io/badge/status-active-success)
 [![CI](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/ci.yml)
+[![Coverage CI](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/coverage.yml/badge.svg)](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/coverage.yml)
+[![Coverage](https://codecov.io/gh/jurgenei/gradle-antlr-plugin/branch/main/graph/badge.svg)](https://codecov.io/gh/jurgenei/gradle-antlr-plugin)
 
 Gradle plugin for converting SQL source trees into XML AST files using dynamic ANTLR parser/lexer loading.
 
@@ -30,6 +32,21 @@ Gradle plugin for converting SQL source trees into XML AST files using dynamic A
 
 - Java 21+
 - Gradle 8+
+
+## Test Coverage
+
+Generate coverage report + enforce minimum threshold (line coverage >= 20%):
+
+```bash
+./gradlew coverage
+```
+
+Coverage report outputs:
+
+- XML: `build/reports/jacoco/test/jacocoTestReport.xml`
+- HTML: `build/reports/jacoco/test/html/index.html`
+
+CI also publishes coverage summary and uploads JaCoCo XML to Codecov for the badge.
 
 ## Apply Plugin
 

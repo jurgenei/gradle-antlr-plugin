@@ -273,7 +273,8 @@ public abstract class XmlAstTask extends DefaultTask {
                             resolvedConfig.lexerClassName(),
                             resolvedConfig.parserClassName(),
                             resolvedConfig.startRule(),
-                            compression.get());
+                            compression.get(),
+                            true);
                 }
             }
         } catch (Exception ex) {

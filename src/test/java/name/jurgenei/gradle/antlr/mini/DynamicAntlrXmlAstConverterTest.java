@@ -38,6 +38,7 @@ public class DynamicAntlrXmlAstConverterTest {
                 MiniLexer.class.getName(),
                 MiniParser.class.getName(),
                 "script",
+                false,
                 false);
 
         for (Path sourcePath : listSqlFiles(VALID_DIR)) {
@@ -66,7 +67,8 @@ public class DynamicAntlrXmlAstConverterTest {
                 MiniLexer.class.getName(),
                 MiniParser.class.getName(),
                 "script",
-                true);
+                true,
+                false);
 
         final Path xmlPath = outputDir.toPath().resolve("01_select_star.xml");
         Assert.assertTrue("Expected XML output", Files.exists(xmlPath));
@@ -89,7 +91,99 @@ public class DynamicAntlrXmlAstConverterTest {
                 MiniLexer.class.getName(),
                 MiniParser.class.getName(),
                 "script",
+                false,
                 false);
+    }
+
+    @Test
+    public void rejectsEmptySourceFiles() throws Exception {
+        final File outputDir = temporaryFolder.newFolder("xml-ast-empty");
+
+        final IllegalArgumentException ex = Assert.assertThrows(
+                IllegalArgumentException.class,
+                () -> new DynamicAntlrXmlAstConverter().convertFileTree(
+                        VALID_DIR.toFile(),
+                        List.of(),
+                        outputDir,
+                        ".xml",
+                        MiniLexer.class.getClassLoader(),
+                        MiniLexer.class.getName(),
+                        MiniParser.class.getName(),
+                        "script",
+                        false,
+                        false));
+
+        Assert.assertTrue(ex.getMessage().contains("sourceFiles cannot be empty"));
+    }
+
+    @Test
+    public void rejectsBlankStartRule() throws Exception {
+        final File outputDir = temporaryFolder.newFolder("xml-ast-blank-rule");
+        final List<File> inputs = List.of(VALID_DIR.resolve("01_select_star.sql").toFile());
+
+        final IllegalArgumentException ex = Assert.assertThrows(
+                IllegalArgumentException.class,
+                () -> new DynamicAntlrXmlAstConverter().convertFileTree(
+                        VALID_DIR.toFile(),
+                        inputs,
+                        outputDir,
+                        ".xml",
+                        MiniLexer.class.getClassLoader(),
+                        MiniLexer.class.getName(),
+                        MiniParser.class.getName(),
+                        "   ",
+                        false,
+                        false));
+
+        Assert.assertTrue(ex.getMessage().contains("startRule cannot be blank"));
+    }
+
+    @Test
+    public void rejectsInvalidExecutionModelInStatsCall() throws Exception {
+        final File outputDir = temporaryFolder.newFolder("xml-ast-invalid-model");
+        final List<File> inputs = List.of(VALID_DIR.resolve("01_select_star.sql").toFile());
+
+        final IllegalArgumentException ex = Assert.assertThrows(
+                IllegalArgumentException.class,
+                () -> new DynamicAntlrXmlAstConverter().convertFileTreeWithStats(
+                        VALID_DIR.toFile(),
+                        inputs,
+                        outputDir,
+                        ".xml",
+                        MiniLexer.class.getClassLoader(),
+                        MiniLexer.class.getName(),
+                        MiniParser.class.getName(),
+                        "script",
+                        false,
+                        false,
+                        "BAD_MODEL",
+                        1));
+
+        Assert.assertTrue(ex.getMessage().contains("Invalid executionModelName"));
+    }
+
+    @Test
+    public void rejectsNonPositiveParallelismInStatsCall() throws Exception {
+        final File outputDir = temporaryFolder.newFolder("xml-ast-invalid-parallelism");
+        final List<File> inputs = List.of(VALID_DIR.resolve("01_select_star.sql").toFile());
+
+        final IllegalArgumentException ex = Assert.assertThrows(
+                IllegalArgumentException.class,
+                () -> new DynamicAntlrXmlAstConverter().convertFileTreeWithStats(
+                        VALID_DIR.toFile(),
+                        inputs,
+                        outputDir,
+                        ".xml",
+                        MiniLexer.class.getClassLoader(),
+                        MiniLexer.class.getName(),
+                        MiniParser.class.getName(),
+                        "script",
+                        false,
+                        false,
+                        "SEQUENTIAL",
+                        0));
+
+        Assert.assertTrue(ex.getMessage().contains("configuredParallelism must be >= 1"));
     }
 
     private static List<Path> listSqlFiles(final Path directory) throws Exception {

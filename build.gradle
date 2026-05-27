@@ -1,6 +1,9 @@
 plugins {
     id 'antlr'
     id 'java-gradle-plugin'
+    id 'jacoco'
+    id 'maven-publish'
+    id 'signing'
 }
 
 group = 'name.jurgenei.gradle'
@@ -10,6 +13,7 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
     }
+    withSourcesJar()
 }
 
 repositories {
@@ -38,6 +42,96 @@ gradlePlugin {
     }
 }
 
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+
+            pom {
+                name = 'ANTLR Plugin'
+                description = 'Gradle plugin for ANTLR4 parser generation'
+                url = 'https://github.com/jurgenei/gradle-antlr-plugin'
+
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+
+                developers {
+                    developer {
+                        id = 'jurgenei'
+                        name = 'Jurgen Hildebrand'
+                    }
+                }
+
+                scm {
+                    connection = 'scm:git:https://github.com/jurgenei/gradle-antlr-plugin.git'
+                    developerConnection = 'scm:git:ssh://git@github.com/jurgenei/gradle-antlr-plugin.git'
+                    url = 'https://github.com/jurgenei/gradle-antlr-plugin'
+                }
+            }
+        }
+    }
+
+    repositories {
+        mavenLocal()
+    }
+}
+
+signing {
+    required = gradle.taskGraph.hasTask("publish")
+    def signingKey = findProperty("signingKey")
+    def signingPassword = findProperty("signingPassword")
+    if (signingKey && signingPassword) {
+        useInMemoryPgpKeys(signingKey, signingPassword)
+        sign publishing.publications.mavenJava
+    }
+}
+
 tasks.withType(Test).configureEach {
     useJUnit()
 }
+
+jacoco {
+    toolVersion = '0.8.12'
+}
+
+tasks.named('test') {
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+tasks.named('jacocoTestReport') {
+    dependsOn tasks.named('test')
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+}
+
+tasks.named('jacocoTestCoverageVerification') {
+    dependsOn tasks.named('jacocoTestReport')
+    violationRules {
+        rule {
+            element = 'BUNDLE'
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.20
+            }
+        }
+    }
+}
+
+tasks.register('coverage') {
+    group = 'verification'
+    description = 'Runs tests, generates JaCoCo report, and verifies minimum coverage threshold.'
+    dependsOn tasks.named('jacocoTestCoverageVerification')
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
+}
+

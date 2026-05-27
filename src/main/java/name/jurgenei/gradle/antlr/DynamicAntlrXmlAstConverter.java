@@ -1,5 +1,7 @@
 package name.jurgenei.gradle.antlr;
 
+import name.jurgenei.gradle.antlr.constants.GrammarConstants;
+import name.jurgenei.gradle.antlr.constants.TimeConstants;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -36,9 +38,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -67,6 +78,7 @@ public final class DynamicAntlrXmlAstConverter {
      * @param parserClassName parser class name or `.g4` grammar coordinate.
      * @param startRule parser entry rule method name.
      * @param compression enables rule-chain compression and path index emission when true.
+     * @param continueOnError when true, keeps converting remaining files and aggregates failures.
      * @throws GradleException when parsing or XML generation fails.
      */
     public void convertFileTree(
@@ -78,29 +90,365 @@ public final class DynamicAntlrXmlAstConverter {
             final String lexerClassName,
             final String parserClassName,
             final String startRule,
-            final boolean compression) {
+            final boolean compression,
+            final boolean continueOnError) {
+        // Guard: Null checks
+        java.util.Objects.requireNonNull(sourceRoot, "sourceRoot cannot be null");
+        java.util.Objects.requireNonNull(sourceFiles, "sourceFiles cannot be null");
+        java.util.Objects.requireNonNull(destinationRoot, "destinationRoot cannot be null");
+        java.util.Objects.requireNonNull(targetExtension, "targetExtension cannot be null");
+        java.util.Objects.requireNonNull(classLoader, "classLoader cannot be null");
+        java.util.Objects.requireNonNull(lexerClassName, "lexerClassName cannot be null");
+        java.util.Objects.requireNonNull(parserClassName, "parserClassName cannot be null");
+        java.util.Objects.requireNonNull(startRule, "startRule cannot be null");
+
+        // Guard: Empty/blank checks
+        if (sourceFiles.isEmpty()) {
+            throw new IllegalArgumentException("sourceFiles cannot be empty");
+        }
+        if (startRule.isBlank()) {
+            throw new IllegalArgumentException("startRule cannot be blank (e.g., 'script')");
+        }
+        if (targetExtension.isBlank()) {
+            throw new IllegalArgumentException("targetExtension cannot be blank (e.g., '.xml')");
+        }
+        if (lexerClassName.isBlank()) {
+            throw new IllegalArgumentException("lexerClassName cannot be blank");
+        }
+        if (parserClassName.isBlank()) {
+            throw new IllegalArgumentException("parserClassName cannot be blank");
+        }
+
+        // Guard: Directory checks
+        if (!sourceRoot.isDirectory()) {
+            throw new IllegalArgumentException("sourceRoot must be an existing directory: " + sourceRoot);
+        }
+
+        convertFileTreeWithStats(
+                sourceRoot,
+                sourceFiles,
+                destinationRoot,
+                targetExtension,
+                classLoader,
+                lexerClassName,
+                parserClassName,
+                startRule,
+                compression,
+                continueOnError,
+                GrammarConstants.EXECUTION_MODEL_SEQUENTIAL,
+                GrammarConstants.DEFAULT_PARALLELISM);
+    }
+
+    public ConversionStats convertFileTreeWithStats(
+            final File sourceRoot,
+            final List<File> sourceFiles,
+            final File destinationRoot,
+            final String targetExtension,
+            final ClassLoader classLoader,
+            final String lexerClassName,
+            final String parserClassName,
+            final String startRule,
+            final boolean compression,
+            final boolean continueOnError,
+            final String executionModelName,
+            final int configuredParallelism) {
+        // Guard: Parallelism constraints
+        if (configuredParallelism < 1) {
+            throw new IllegalArgumentException("configuredParallelism must be >= 1, got: " + configuredParallelism);
+        }
+
+        // Guard: Execution model validation
+        if (executionModelName != null && !executionModelName.isBlank()) {
+            final String upperModel = executionModelName.trim().toUpperCase();
+            if (!upperModel.equals(GrammarConstants.EXECUTION_MODEL_SEQUENTIAL)
+                    && !upperModel.equals(GrammarConstants.EXECUTION_MODEL_PLATFORM_THREADS)
+                    && !upperModel.equals(GrammarConstants.EXECUTION_MODEL_VIRTUAL_THREADS)) {
+                throw new IllegalArgumentException(
+                    "Invalid executionModelName: '" + executionModelName + "'. " +
+                    "Expected one of: SEQUENTIAL, PLATFORM_THREADS, VIRTUAL_THREADS");
+            }
+        }
+
+        final long runStartNanos = System.nanoTime();
         try {
             Files.createDirectories(destinationRoot.toPath());
 
             try (RuntimeParserBinding binding = prepareParserBinding(classLoader, lexerClassName, parserClassName)) {
-                for (File sourceFile : sourceFiles) {
-                    final Path relative = sourceRoot.toPath().relativize(sourceFile.toPath());
-                    final Path output = destinationRoot.toPath().resolve(mapTarget(relative, targetExtension));
-                    Files.createDirectories(output.getParent());
+                final List<ConversionJob> jobs = buildConversionJobs(sourceRoot, sourceFiles, destinationRoot, targetExtension);
+                
+                final ExecutionModel executionModel = parseExecutionModel(executionModelName);
+                final int workerLimit = executionModel == ExecutionModel.SEQUENTIAL
+                        ? 1
+                        : Math.max(1, configuredParallelism);
+                final List<ConversionOutcome> outcomes = executeJobs(
+                        jobs,
+                        binding,
+                        startRule,
+                        compression,
+                        continueOnError,
+                        executionModel,
+                        workerLimit);
 
-                    final String xml = parseToXml(
-                            sourceFile.toPath(),
-                            binding.classLoader(),
-                            binding.lexerClassName(),
-                            binding.parserClassName(),
-                            startRule,
-                            compression);
-                    Files.writeString(output, xml, StandardCharsets.UTF_8);
-                }
+                return processOutcomes(outcomes, runStartNanos);
             }
+        } catch (ConversionFailedException ex) {
+            throw ex;
         } catch (Exception ex) {
             throw new GradleException("Dynamic ANTLR conversion failed", ex);
         }
+    }
+
+    /**
+     * Builds a list of conversion jobs for all input files.
+     * Each job maps a source file to its output location with relative path preserved.
+     */
+    private List<ConversionJob> buildConversionJobs(
+            final File sourceRoot,
+            final List<File> sourceFiles,
+            final File destinationRoot,
+            final String targetExtension) throws IOException {
+        final List<ConversionJob> jobs = new ArrayList<>();
+        int index = 0;
+        for (File sourceFile : sourceFiles) {
+            final Path relative = sourceRoot.toPath().relativize(sourceFile.toPath());
+            final Path output = destinationRoot.toPath().resolve(mapTarget(relative, targetExtension));
+            Files.createDirectories(output.getParent());
+            jobs.add(new ConversionJob(index++, sourceFile, relative, output));
+        }
+        return jobs;
+    }
+
+    /**
+     * Processes completed conversion outcomes and aggregates results.
+     * Separates successes from failures, prints outputs, and returns conversion statistics.
+     */
+    private ConversionStats processOutcomes(
+            final List<ConversionOutcome> outcomes,
+            final long runStartNanos) {
+        final List<String> failures = new ArrayList<>();
+        final List<String> successes = new ArrayList<>();
+        long cumulativeFileProcessingNanos = 0L;
+
+        outcomes.sort(Comparator.comparingInt(ConversionOutcome::index));
+        
+        for (ConversionOutcome outcome : outcomes) {
+            cumulativeFileProcessingNanos += outcome.durationNanos();
+            if (outcome.success()) {
+                successes.add(outcome.successLine());
+            } else {
+                failures.add(outcome.failureMessage());
+            }
+        }
+
+        for (String success : successes) {
+            System.out.println(success);
+        }
+        
+        // Print detailed parse errors inline
+        for (String failure : failures) {
+            if (failure.startsWith("Parse failed for")) {
+                final int colonIdx = failure.indexOf(": ");
+                if (colonIdx > 0) {
+                    final String filePath = failure.substring("Parse failed for ".length(), colonIdx);
+                    final String messages = failure.substring(colonIdx + 2);
+                    for (String msg : messages.split(" \\| ")) {
+                        System.out.println(filePath + " " + msg.trim());
+                    }
+                }
+            }
+        }
+
+        final ConversionStats stats = new ConversionStats(
+                outcomes.size(),
+                failures.size(),
+                System.nanoTime() - runStartNanos,
+                cumulativeFileProcessingNanos);
+        
+        if (!failures.isEmpty()) {
+            throw new ConversionFailedException(String.join(" || ", failures), stats);
+        }
+        return stats;
+    }
+
+    private List<ConversionOutcome> executeJobs(
+            final List<ConversionJob> jobs,
+            final RuntimeParserBinding binding,
+            final String startRule,
+            final boolean compression,
+            final boolean continueOnError,
+            final ExecutionModel executionModel,
+            final int workerLimit) throws Exception {
+        if (jobs.isEmpty()) {
+            return List.of();
+        }
+        if (executionModel == ExecutionModel.SEQUENTIAL || workerLimit <= 1 || jobs.size() == 1) {
+            final List<ConversionOutcome> outcomes = new ArrayList<>();
+            for (ConversionJob job : jobs) {
+                final ConversionOutcome outcome = processSingleFile(job, binding, startRule, compression);
+                outcomes.add(outcome);
+                if (!continueOnError && !outcome.success()) {
+                    break;
+                }
+            }
+            return outcomes;
+        }
+
+        final ExecutorService executor = createExecutor(executionModel);
+        final Semaphore permits = new Semaphore(workerLimit);
+        final CompletionService<ConversionOutcome> completion = new ExecutorCompletionService<>(executor);
+        final List<Future<ConversionOutcome>> submitted = new ArrayList<>();
+        try {
+            for (ConversionJob job : jobs) {
+                submitted.add(completion.submit(new Callable<>() {
+                    @Override
+                    public ConversionOutcome call() throws Exception {
+                        permits.acquire();
+                        try {
+                            return processSingleFile(job, binding, startRule, compression);
+                        } finally {
+                            permits.release();
+                        }
+                    }
+                }));
+            }
+
+            final List<ConversionOutcome> outcomes = new ArrayList<>();
+            for (int i = 0; i < jobs.size(); i++) {
+                final ConversionOutcome outcome;
+                try {
+                    outcome = completion.take().get();
+                } catch (ExecutionException ex) {
+                    throw unwrapExecutionException(ex);
+                }
+                outcomes.add(outcome);
+                if (!continueOnError && !outcome.success()) {
+                    for (Future<ConversionOutcome> future : submitted) {
+                        future.cancel(true);
+                    }
+                    break;
+                }
+            }
+            return outcomes;
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private ExecutorService createExecutor(final ExecutionModel executionModel) {
+        if (executionModel == ExecutionModel.VIRTUAL_THREADS) {
+            return Executors.newThreadPerTaskExecutor(Thread.ofVirtual()
+                    .name(GrammarConstants.VIRTUAL_THREAD_NAME_PREFIX, 0)
+                    .factory());
+        }
+        return Executors.newCachedThreadPool();
+    }
+
+    private Exception unwrapExecutionException(final ExecutionException executionException) {
+        final Throwable cause = executionException.getCause();
+        if (cause instanceof Exception ex) {
+            return ex;
+        }
+        return new Exception(cause);
+    }
+
+    private ConversionOutcome processSingleFile(
+            final ConversionJob job,
+            final RuntimeParserBinding binding,
+            final String startRule,
+            final boolean compression) {
+        final long fileStartNanos = System.nanoTime();
+        try {
+            final String xml = parseToXml(
+                    job.sourceFile().toPath(),
+                    binding.classLoader(),
+                    binding.lexerClassName(),
+                    binding.parserClassName(),
+                    startRule,
+                    compression);
+            Files.writeString(job.output(), xml, StandardCharsets.UTF_8);
+            final long durationNanos = System.nanoTime() - fileStartNanos;
+            final long lineCount = countLines(job.sourceFile().toPath());
+            final long byteCount = job.sourceFile().length();
+            return ConversionOutcome.success(
+                    job.index(),
+                    toPortablePath(job.relativePath()) + " " + formatDurationSeconds(durationNanos)
+                            + " " + lineCount + ":" + byteCount + " parsed",
+                    durationNanos);
+        } catch (Exception ex) {
+            return ConversionOutcome.failure(job.index(), firstNonBlankMessage(ex), System.nanoTime() - fileStartNanos);
+        }
+    }
+
+    private String formatDurationSeconds(final long durationNanos) {
+        final long seconds = TimeConstants.nanosToSeconds(durationNanos);
+        return seconds + "s";
+    }
+
+    private ExecutionModel parseExecutionModel(final String executionModelName) {
+        if (executionModelName == null || executionModelName.isBlank()) {
+            return ExecutionModel.SEQUENTIAL;
+        }
+        return switch (executionModelName.trim().toUpperCase()) {
+            case GrammarConstants.EXECUTION_MODEL_VIRTUAL_THREADS -> ExecutionModel.VIRTUAL_THREADS;
+            case GrammarConstants.EXECUTION_MODEL_PLATFORM_THREADS -> ExecutionModel.PLATFORM_THREADS;
+            default -> ExecutionModel.SEQUENTIAL;
+        };
+    }
+
+    private enum ExecutionModel {
+        SEQUENTIAL,
+        PLATFORM_THREADS,
+        VIRTUAL_THREADS
+    }
+
+    private record ConversionJob(int index, File sourceFile, Path relativePath, Path output) {
+    }
+
+    private record ConversionOutcome(
+            int index,
+            boolean success,
+            String successLine,
+            String failureMessage,
+            long durationNanos) {
+        private static ConversionOutcome success(final int index, final String successLine, final long durationNanos) {
+            return new ConversionOutcome(index, true, successLine, null, durationNanos);
+        }
+
+        private static ConversionOutcome failure(final int index, final String failureMessage, final long durationNanos) {
+            return new ConversionOutcome(index, false, null, failureMessage, durationNanos);
+        }
+    }
+
+    public record ConversionStats(
+            int processedFiles,
+            int filesWithErrors,
+            long totalDurationNanos,
+            long cumulativeFileProcessingNanos) {
+    }
+
+    public static final class ConversionFailedException extends GradleException {
+        private final ConversionStats stats;
+
+        public ConversionFailedException(final String message, final ConversionStats stats) {
+            super(message);
+            this.stats = stats;
+        }
+
+        public ConversionStats getStats() {
+            return stats;
+        }
+    }
+
+    private String firstNonBlankMessage(final Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            final String message = current.getMessage();
+            if (message != null && !message.isBlank()) {
+                return message;
+            }
+            current = current.getCause();
+        }
+        return "Unknown conversion failure";
     }
 
     private RuntimeParserBinding prepareParserBinding(
@@ -134,6 +482,7 @@ public final class DynamicAntlrXmlAstConverter {
 
         compileGeneratedSources(classLoader, generatedDir, classesDir);
 
+
         final String lexerSimple = grammarName(lexerGrammar);
         final String parserSimple = grammarName(parserGrammar);
         final String lexerFqcn = resolveGeneratedFqcn(generatedDir, lexerSimple);
@@ -148,11 +497,11 @@ public final class DynamicAntlrXmlAstConverter {
 
     private boolean isGrammarSourceSpec(final String spec) {
         final String trimmed = spec.trim();
-        return trimmed.endsWith(".g4")
-                || trimmed.startsWith("http://")
-                || trimmed.startsWith("https://")
-                || trimmed.startsWith("file:")
-                || trimmed.startsWith("//")
+        return trimmed.endsWith(GrammarConstants.GRAMMAR_FILE_EXTENSION)
+                || trimmed.startsWith(GrammarConstants.SCHEME_HTTP)
+                || trimmed.startsWith(GrammarConstants.SCHEME_HTTPS)
+                || trimmed.startsWith(GrammarConstants.SCHEME_FILE)
+                || trimmed.startsWith(GrammarConstants.SCHEME_PROTOCOL_LESS)
                 || looksLikeHostPathWithoutScheme(trimmed);
     }
 
@@ -175,7 +524,7 @@ public final class DynamicAntlrXmlAstConverter {
         if (uri != null) {
             final String fileName = fileNameFromUri(uri, fallbackName);
             final Path target = targetDir.resolve(fileName);
-            if ("file".equalsIgnoreCase(uri.getScheme())) {
+            if (GrammarConstants.SCHEME_FILE.equalsIgnoreCase(uri.getScheme())) {
                 Files.copy(Path.of(uri), target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             } else {
                 try (InputStream in = uri.toURL().openStream()) {
@@ -194,8 +543,8 @@ public final class DynamicAntlrXmlAstConverter {
 
     private URI resolveSpecUri(final String spec) {
         final String trimmed = spec.trim();
-        if (trimmed.startsWith("//")) {
-            return URI.create("https:" + trimmed);
+        if (trimmed.startsWith(GrammarConstants.SCHEME_PROTOCOL_LESS)) {
+            return URI.create(GrammarConstants.SCHEME_HTTPS + trimmed);
         }
         if (looksLikeHostPathWithoutScheme(trimmed)) {
             return URI.create(defaultSchemeForHostPath(trimmed) + "://" + trimmed);
@@ -291,10 +640,9 @@ public final class DynamicAntlrXmlAstConverter {
     }
 
     private String grammarName(final Path grammarFile) throws IOException {
-        final Pattern pattern = Pattern.compile("(?:lexer|parser)?\\s*grammar\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*;");
         try (Stream<String> lines = Files.lines(grammarFile, StandardCharsets.UTF_8)) {
             for (String line : (Iterable<String>) lines::iterator) {
-                final Matcher matcher = pattern.matcher(line);
+                final Matcher matcher = GrammarConstants.GRAMMAR_NAME_PATTERN.matcher(line);
                 if (matcher.find()) {
                     return matcher.group(1);
                 }
@@ -320,7 +668,8 @@ public final class DynamicAntlrXmlAstConverter {
         try (Stream<String> lines = Files.lines(source, StandardCharsets.UTF_8)) {
             for (String line : (Iterable<String>) lines::iterator) {
                 final String trimmed = line.trim();
-                if (trimmed.startsWith("package ") && trimmed.endsWith(";")) {
+                if (GrammarConstants.PACKAGE_DECLARATION_PATTERN.matcher(trimmed).find()) {
+                    final Matcher matcher = GrammarConstants.PACKAGE_DECLARATION_PATTERN.matcher(trimmed);
                     packageName = trimmed.substring("package ".length(), trimmed.length() - 1).trim();
                     break;
                 }
@@ -365,6 +714,14 @@ public final class DynamicAntlrXmlAstConverter {
         final Constructor<? extends Parser> parserCtor = parserClass.getConstructor(org.antlr.v4.runtime.TokenStream.class);
         final Parser parser = parserCtor.newInstance(tokenStream);
 
+        // Cache instances in binding for DFA management (must be done via reflection for private access)
+        try {
+            // This will be called from binding context, so we need to stash for later clearing
+            cacheParserInstances(lexer, parser);
+        } catch (Exception ignored) {
+            // Caching is best-effort; proceed without it
+        }
+
         final CollectingErrorListener errors = new CollectingErrorListener();
         lexer.removeErrorListeners();
         parser.removeErrorListeners();
@@ -381,7 +738,32 @@ public final class DynamicAntlrXmlAstConverter {
             throw new GradleException("Parse failed for " + sourceFile + ": " + String.join(" | ", errors.messages));
         }
 
-        return toXml(parser, parseTree, sourceFile.getFileName().toString(), startRule, compression);
+        final String xml = toXml(parser, parseTree, sourceFile.getFileName().toString(), startRule, compression);
+        final long lineCount = countLines(sourceFile);
+        final long byteCount = Files.size(sourceFile);
+        errors.successfulParse = true;
+        errors.lineCount = lineCount;
+        errors.byteCount = byteCount;
+
+        return xml;
+    }
+
+    private final ThreadLocal<RuntimeParserBinding> currentBinding = new ThreadLocal<>();
+
+    // Store the current binding temporarily for use in parseToXml context
+    private void setCurrentBinding(final RuntimeParserBinding binding) {
+        currentBinding.set(binding);
+    }
+
+    private void clearCurrentBinding() {
+        currentBinding.remove();
+    }
+
+    private void cacheParserInstances(final Lexer lexer, final Parser parser) {
+        final RuntimeParserBinding binding = currentBinding.get();
+        if (binding != null) {
+            binding.setCachedInstances(lexer, parser);
+        }
     }
 
     private String toXml(
@@ -560,24 +942,26 @@ public final class DynamicAntlrXmlAstConverter {
     }
 
     private static final class RuntimeParserBinding implements AutoCloseable {
-        private final ClassLoader classLoader;
+        private final ClassLoader classLoaderField;
         private final String lexerClassName;
         private final String parserClassName;
         private final Path workspace;
+        private volatile Lexer cachedLexer;
+        private volatile Parser cachedParser;
 
         private RuntimeParserBinding(
                 final ClassLoader classLoader,
                 final String lexerClassName,
                 final String parserClassName,
                 final Path workspace) {
-            this.classLoader = classLoader;
+            this.classLoaderField = classLoader;
             this.lexerClassName = lexerClassName;
             this.parserClassName = parserClassName;
             this.workspace = workspace;
         }
 
         private ClassLoader classLoader() {
-            return classLoader;
+            return classLoaderField;
         }
 
         private String lexerClassName() {
@@ -588,9 +972,29 @@ public final class DynamicAntlrXmlAstConverter {
             return parserClassName;
         }
 
+        private void setCachedInstances(final Lexer lexer, final Parser parser) {
+            this.cachedLexer = lexer;
+            this.cachedParser = parser;
+        }
+
+        private void clearDFACaches() {
+            try {
+                if (cachedLexer != null) {
+                    cachedLexer.getInterpreter().clearDFA();
+                }
+                if (cachedParser != null) {
+                    cachedParser.getInterpreter().clearDFA();
+                }
+            } catch (Exception ignored) {
+                // Best effort DFA clearing
+            }
+        }
+
         @Override
         public void close() {
-            if (classLoader instanceof URLClassLoader closable) {
+            // Clear DFA on binding close
+            clearDFACaches();
+            if (classLoaderField instanceof URLClassLoader closable) {
                 try {
                     closable.close();
                 } catch (IOException ignored) {
@@ -621,6 +1025,9 @@ public final class DynamicAntlrXmlAstConverter {
     private static final class CollectingErrorListener extends BaseErrorListener {
         private int errorCount;
         private final List<String> messages = new ArrayList<>();
+        private boolean successfulParse;
+        private long lineCount;
+        private long byteCount;
 
         @Override
         public void syntaxError(
@@ -634,5 +1041,15 @@ public final class DynamicAntlrXmlAstConverter {
             messages.add(line + ":" + charPositionInLine + " " + msg);
         }
     }
-}
 
+    private long countLines(final Path sourceFile) throws IOException {
+        try (Stream<String> lines = Files.lines(sourceFile, StandardCharsets.UTF_8)) {
+            return lines.count();
+        }
+    }
+
+    private String toPortablePath(final Path relativePath) {
+        return relativePath.toString().replace(File.separatorChar, '/');
+    }
+
+}

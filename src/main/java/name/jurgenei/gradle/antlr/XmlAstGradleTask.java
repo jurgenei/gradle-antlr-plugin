@@ -2,6 +2,8 @@ package name.jurgenei.gradle.antlr;
 
 import name.jurgenei.gradle.antlr.catalog.GrammarCatalogEntry;
 import name.jurgenei.gradle.antlr.catalog.GrammarCatalogLoader;
+import name.jurgenei.gradle.antlr.constants.GrammarConstants;
+import name.jurgenei.gradle.antlr.constants.TimeConstants;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.ConfigurableFileCollection;
@@ -29,6 +31,7 @@ import java.nio.file.PathMatcher;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -43,6 +46,7 @@ import java.util.stream.Stream;
 public abstract class XmlAstGradleTask extends DefaultTask {
 
     private final DirectoryProperty sourceDirectory;
+    private final String projectDirPath;
     private final DirectoryProperty destinationDirectory;
     private final Property<String> grammar;
     private final Property<String> targetExtension;
@@ -53,33 +57,40 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     private final Property<Boolean> force;
     private final Property<Boolean> failOnError;
     private final Property<Boolean> failOnTransformationError;
+    private final Property<Boolean> continueOnError;
+    private final Property<Boolean> suppressStackTrace;
     private final RegularFileProperty catalogFile;
     private final Property<String> catalogGrammar;
     private final Property<String> parserClassName;
     private final Property<String> lexerClassName;
     private final Property<String> startRule;
     private final Property<Boolean> compression;
+    private final Property<Boolean> enableDFAMonitoring;
     private final ConfigurableFileCollection runtimeClasspath;
 
     @Inject
     public XmlAstGradleTask(final ObjectFactory objects) {
+        this.projectDirPath = getProject().getProjectDir().getAbsolutePath();
         sourceDirectory = objects.directoryProperty();
         destinationDirectory = objects.directoryProperty();
-        grammar = objects.property(String.class).convention("oracle");
-        targetExtension = objects.property(String.class).convention(".xml");
-        parallelism = objects.property(Integer.class).convention(1);
-        executionModel = objects.property(String.class).convention("SEQUENTIAL");
-        includes = objects.listProperty(String.class).convention(List.of("**/*.sql"));
+        grammar = objects.property(String.class).convention(GrammarConstants.DEFAULT_GRAMMAR);
+        targetExtension = objects.property(String.class).convention(GrammarConstants.DEFAULT_FILE_EXTENSION);
+        parallelism = objects.property(Integer.class).convention(GrammarConstants.DEFAULT_PARALLELISM);
+        executionModel = objects.property(String.class).convention(GrammarConstants.EXECUTION_MODEL_SEQUENTIAL);
+        includes = objects.listProperty(String.class).convention(List.of(GrammarConstants.DEFAULT_INCLUDE_PATTERN));
         excludes = objects.listProperty(String.class).convention(List.of());
         force = objects.property(Boolean.class).convention(false);
         failOnError = objects.property(Boolean.class).convention(true);
         failOnTransformationError = objects.property(Boolean.class).convention(true);
+        continueOnError = objects.property(Boolean.class).convention(true);
+        suppressStackTrace = objects.property(Boolean.class).convention(false);
         catalogFile = objects.fileProperty();
         catalogGrammar = objects.property(String.class);
         parserClassName = objects.property(String.class);
         lexerClassName = objects.property(String.class);
-        startRule = objects.property(String.class).convention("script");
+        startRule = objects.property(String.class).convention(GrammarConstants.DEFAULT_START_RULE);
         compression = objects.property(Boolean.class).convention(false);
+        enableDFAMonitoring = objects.property(Boolean.class).convention(false);
         runtimeClasspath = objects.fileCollection();
 
         sourceDirectory.convention(getProject().getLayout().getProjectDirectory().dir("src/main/sql"));
@@ -199,6 +210,26 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     }
 
     /**
+     * Continue processing remaining files after per-file parse failures.
+     *
+     * @return continue-on-error property.
+     */
+    @Input
+    public Property<Boolean> getContinueOnError() {
+        return continueOnError;
+    }
+
+    /**
+     * Suppresses task failure stack traces and emits concise lifecycle diagnostics instead.
+     *
+     * @return suppress-stack-trace property.
+     */
+    @Input
+    public Property<Boolean> getSuppressStackTrace() {
+        return suppressStackTrace;
+    }
+
+    /**
      * Optional XML catalog containing named grammars and parser/lexer coordinates.
      *
      * @return catalog file property.
@@ -276,6 +307,19 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     }
 
     /**
+     * Enables DFA memory monitoring and logging (requires --info or --debug).
+     *
+     * <p>When enabled, logs DFA clearing operations and memory heap statistics
+     * after each file is parsed (both success and failure cases).</p>
+     *
+     * @return DFA monitoring flag property.
+     */
+    @Input
+    public Property<Boolean> getEnableDFAMonitoring() {
+        return enableDFAMonitoring;
+    }
+
+    /**
      * Runtime classpath used to load converter classes and dependencies.
      *
      * @return classpath file collection.
@@ -292,46 +336,242 @@ public abstract class XmlAstGradleTask extends DefaultTask {
      */
     @TaskAction
     public void convert() {
+        final long runStartNanos = System.nanoTime();
         final File sourceDir = sourceDirectory.get().getAsFile();
+
+        // Guard: Directory validation
         if (!sourceDir.isDirectory()) {
             throw new GradleException("sourceDirectory must be an existing directory: " + sourceDir);
         }
 
-        final List<File> selectedFiles = selectSourceFiles(sourceDir.toPath(), includes.get(), excludes.get());
         final File destinationDir = destinationDirectory.get().getAsFile();
-        final List<File> jobs = applyUpToDateCheck(sourceDir.toPath(), destinationDir.toPath(), selectedFiles);
+        if (!destinationDir.getParentFile().isDirectory()) {
+            throw new GradleException("destinationDirectory parent must be an existing directory: "
+                    + destinationDir.getParent());
+        }
+
+        // Validate and resolve all configurations upfront
         final ResolvedParserConfig resolvedConfig = resolveEffectiveConfig();
+        final String extension = validateAndGetExtension();
+        final int parallelismValue = validateAndGetParallelism();
+        final String executionModelValue = validateAndGetExecutionModel();
+
+        // Select and filter files for processing
+        final List<File> selectedFiles = selectSourceFiles(sourceDir.toPath(), includes.get(), excludes.get());
+        final List<File> jobs = applyUpToDateCheck(sourceDir.toPath(), destinationDir.toPath(), selectedFiles);
 
         if (jobs.isEmpty()) {
             getLogger().info("No files selected for conversion in {}", sourceDir);
+            logIndentedSummary(new DynamicAntlrXmlAstConverter.ConversionStats(0, 0, 0, 0), executionModel.get(), parallelism.get());
             return;
         }
 
+        // Execute conversion and handle results
+        performConversion(sourceDir, destinationDir, resolvedConfig, extension, parallelismValue, 
+                         executionModelValue, jobs, runStartNanos);
+    }
+
+    /**
+     * Validates configuration parameters and executes the conversion process.
+     * Handles both success and failure paths with proper cleanup and logging.
+     */
+    private void performConversion(
+            final File sourceDir,
+            final File destinationDir,
+            final ResolvedParserConfig resolvedConfig,
+            final String extension,
+            final int parallelismValue,
+            final String executionModelValue,
+            final List<File> jobs,
+            final long runStartNanos) {
         final List<String> failures = new ArrayList<>();
+        DynamicAntlrXmlAstConverter.ConversionStats conversionStats = null;
+        int fallbackFilesWithErrors = 0;
+
+        if (enableDFAMonitoring.get()) {
+            getLogger().info("DFA memory monitoring enabled for {} file(s)", jobs.size());
+            logHeapMemory("Initial state");
+        }
 
         try (URLClassLoader classLoader = createRuntimeClassLoader()) {
-            new DynamicAntlrXmlAstConverter().convertFileTree(
+            conversionStats = new DynamicAntlrXmlAstConverter().convertFileTreeWithStats(
                     sourceDir,
                     jobs,
                     destinationDir,
-                    targetExtension.get(),
+                    extension,
                     classLoader,
                     resolvedConfig.lexerClassName(),
                     resolvedConfig.parserClassName(),
                     resolvedConfig.startRule(),
-                    compression.get());
+                    compression.get(),
+                    continueOnError.get(),
+                    executionModelValue,
+                    parallelismValue);
         } catch (Exception ex) {
-            final String message = "xmlast conversion failed: " + ex.getMessage();
-            if (failOnError.get() && failOnTransformationError.get()) {
-                throw new GradleException(message, ex);
+            conversionStats = handleConversionException(ex, failures, jobs, runStartNanos);
+            fallbackFilesWithErrors = conversionStats == null ? findParseFailureMessages(ex).size() : 0;
+        } finally {
+            if (conversionStats == null) {
+                conversionStats = new DynamicAntlrXmlAstConverter.ConversionStats(
+                        jobs.size(),
+                        fallbackFilesWithErrors,
+                        System.nanoTime() - runStartNanos,
+                        0L);
             }
-            failures.add(message);
-            getLogger().warn(message, ex);
+            logIndentedSummary(conversionStats, executionModel.get(), parallelism.get());
+            if (enableDFAMonitoring.get()) {
+                logHeapMemory("After conversion");
+            }
         }
 
         if (!failures.isEmpty() && failOnError.get()) {
             throw new GradleException(String.join(System.lineSeparator(), failures));
         }
+    }
+
+    /**
+     * Handles exceptions during conversion, extracting stats when available and logging appropriately.
+     */
+    private DynamicAntlrXmlAstConverter.ConversionStats handleConversionException(
+            final Exception ex,
+            final List<String> failures,
+            final List<File> jobs,
+            final long runStartNanos) {
+        final DynamicAntlrXmlAstConverter.ConversionStats extractedStats = findConversionStats(ex);
+        DynamicAntlrXmlAstConverter.ConversionStats result = extractedStats;
+        
+        final String message = "xmlast conversion failed: " + ex.getMessage();
+        logLifecycleFailure(ex);
+        
+        if (failOnError.get() && failOnTransformationError.get()) {
+            if (suppressStackTrace.get()) {
+                throw new GradleException(message);
+            }
+            throw new GradleException(message, ex);
+        }
+        
+        failures.add(message);
+        if (suppressStackTrace.get()) {
+            getLogger().warn(message);
+        } else {
+            getLogger().warn(message, ex);
+        }
+        
+        return result;
+    }
+
+    /**
+     * Validates the file extension configuration and returns the value.
+     */
+    private String validateAndGetExtension() {
+        String extension = targetExtension.get();
+        if (extension == null || extension.isBlank()) {
+            throw new GradleException("targetExtension is not configured");
+        }
+        return extension;
+    }
+
+    /**
+     * Validates the parallelism configuration and returns the value.
+     */
+    private int validateAndGetParallelism() {
+        int parallelismValue = parallelism.get();
+        if (parallelismValue < 1) {
+            throw new GradleException("parallelism must be >= 1, got: " + parallelismValue);
+        }
+        return parallelismValue;
+    }
+
+    /**
+     * Validates the execution model configuration and returns the value.
+     */
+    private String validateAndGetExecutionModel() {
+        String executionModelValue = executionModel.get();
+        if (executionModelValue != null && !executionModelValue.isBlank()) {
+            final String upperModel = executionModelValue.trim().toUpperCase();
+            if (!upperModel.equals(GrammarConstants.EXECUTION_MODEL_SEQUENTIAL)
+                    && !upperModel.equals(GrammarConstants.EXECUTION_MODEL_PLATFORM_THREADS)
+                    && !upperModel.equals(GrammarConstants.EXECUTION_MODEL_VIRTUAL_THREADS)) {
+                throw new GradleException(
+                    "Invalid executionModel: '" + executionModelValue + "'. " +
+                    "Expected one of: SEQUENTIAL, PLATFORM_THREADS, VIRTUAL_THREADS");
+            }
+        }
+        return executionModelValue;
+    }
+
+    private void logHeapMemory(final String label) {
+        final Runtime runtime = Runtime.getRuntime();
+        final long maxMemory = runtime.maxMemory();
+        final long totalMemory = runtime.totalMemory();
+        final long freeMemory = runtime.freeMemory();
+        final long usedMemory = totalMemory - freeMemory;
+        final long usedPercent = (usedMemory * 100) / maxMemory;
+        getLogger().info(
+                "Heap [{}]: used={} MB ({} %), total={} MB, max={} MB",
+                label,
+                usedMemory / (1024 * 1024),
+                usedPercent,
+                totalMemory / (1024 * 1024),
+                maxMemory / (1024 * 1024));
+    }
+
+    private DynamicAntlrXmlAstConverter.ConversionStats findConversionStats(final Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof DynamicAntlrXmlAstConverter.ConversionFailedException conversionFailure) {
+                return conversionFailure.getStats();
+            }
+            current = current.getCause();
+        }
+        return null;
+    }
+
+    private void logIndentedSummary(
+            final DynamicAntlrXmlAstConverter.ConversionStats stats,
+            final String executionModelName,
+            final int configuredParallelism) {
+        final int processed = stats.processedFiles();
+        final int withErrors = Math.max(0, stats.filesWithErrors());
+        final int withoutErrors = Math.max(0, processed - withErrors);
+        final double successRate = processed == 0 ? 100.0 : (withoutErrors * 100.0) / processed;
+        final long totalNanos = Math.max(0L, stats.totalDurationNanos());
+        final long averageNanos = processed == 0 ? 0L : totalNanos / processed;
+        final int normalizedParallelism = Math.max(1, configuredParallelism);
+        final long cumulativeFileNanos = Math.max(0L, stats.cumulativeFileProcessingNanos());
+        final double estimatedSequentialNanos = (double) cumulativeFileNanos;
+        final double speedupFactor = totalNanos == 0
+                ? 1.0
+                : Math.max(0.0, estimatedSequentialNanos / (double) totalNanos);
+
+        final List<String> lines = List.of(
+                "XML AST Conversion Summary",
+                String.format(Locale.ROOT, "  Files processed            : %d", processed),
+                String.format(Locale.ROOT, "  Files with errors          : %d", withErrors),
+                String.format(Locale.ROOT, "  Files with no errors       : %.2f%%", successRate),
+                String.format(Locale.ROOT, "  Execution profile          : %s / %d / %.2fx", executionModelName, normalizedParallelism, speedupFactor),
+                String.format(Locale.ROOT, "  Estimated sequential time  : %s", formatHhMmSs(cumulativeFileNanos)),
+                String.format(Locale.ROOT, "  Total processing time      : %s", formatHhMmSs(totalNanos)),
+                String.format(Locale.ROOT, "  Average time per file      : %s (%s ms)", formatHhMmSs(averageNanos), String.format(Locale.ROOT, "%.2f", averageNanos / 1_000_000.0))
+        );
+        logBoxedSummary(lines);
+    }
+
+    private void logBoxedSummary(final List<String> lines) {
+        final int contentWidth = lines.stream().mapToInt(String::length).max().orElse(0);
+        final String border = "+" + "-".repeat(contentWidth + 2) + "+";
+        getLogger().lifecycle(border);
+        for (String line : lines) {
+            final int padding = Math.max(0, contentWidth - line.length());
+            getLogger().lifecycle("| " + line + " ".repeat(padding) + " |");
+        }
+        getLogger().lifecycle(border);
+    }
+
+    private String formatHhMmSs(final long durationNanos) {
+        final long totalSeconds = durationNanos / TimeConstants.NANOS_PER_SECOND;
+        final long[] components = TimeConstants.toHourMinuteSecond(totalSeconds);
+        return String.format("%02d:%02d:%02d", components[0], components[1], components[2]);
     }
 
     private ResolvedParserConfig resolveEffectiveConfig() {
@@ -385,11 +625,11 @@ public abstract class XmlAstGradleTask extends DefaultTask {
 
     private boolean looksLikeGrammarCoordinate(final String value) {
         final String trimmed = value.trim();
-        return trimmed.endsWith(".g4")
-                || trimmed.startsWith("http://")
-                || trimmed.startsWith("https://")
-                || trimmed.startsWith("file:")
-                || trimmed.startsWith("//")
+        return trimmed.endsWith(GrammarConstants.GRAMMAR_FILE_EXTENSION)
+                || trimmed.startsWith(GrammarConstants.SCHEME_HTTP)
+                || trimmed.startsWith(GrammarConstants.SCHEME_HTTPS)
+                || trimmed.startsWith(GrammarConstants.SCHEME_FILE)
+                || trimmed.startsWith(GrammarConstants.SCHEME_PROTOCOL_LESS)
                 || trimmed.contains("/");
     }
 
@@ -478,6 +718,90 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             }
         }
         return false;
+    }
+
+    private void logLifecycleFailure(final Throwable throwable) {
+        final List<String> parseMessages = findParseFailureMessages(throwable);
+        if (!parseMessages.isEmpty()) {
+            for (String parseMessage : parseMessages) {
+                logParseDiagnostics(parseMessage);
+            }
+            return;
+        }
+        final String message = firstNonBlankMessage(throwable);
+        if (message != null) {
+            getLogger().lifecycle("xmlast failure: {}", message);
+        }
+    }
+
+    private List<String> findParseFailureMessages(final Throwable throwable) {
+        final List<String> messages = new ArrayList<>();
+        Throwable current = throwable;
+        while (current != null) {
+            final String message = current.getMessage();
+            if (message != null) {
+                final String[] fragments = message.split("\\s*\\|\\|\\s*");
+                for (String fragment : fragments) {
+                    if (fragment.startsWith("Parse failed for ")) {
+                        messages.add(fragment);
+                    }
+                }
+            }
+            current = current.getCause();
+        }
+        return messages;
+    }
+
+    private String firstNonBlankMessage(final Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            final String message = current.getMessage();
+            if (message != null && !message.isBlank()) {
+                return message;
+            }
+            current = current.getCause();
+        }
+        return null;
+    }
+
+    private void logParseDiagnostics(final String parseMessage) {
+        final String prefix = "Parse failed for ";
+        final int detailSeparator = parseMessage.indexOf(": ");
+        final String source = detailSeparator > prefix.length()
+                ? parseMessage.substring(prefix.length(), detailSeparator)
+                : "<unknown>";
+        final String diagnostics = detailSeparator > -1
+                ? parseMessage.substring(detailSeparator + 2)
+                : parseMessage;
+        final String[] entries = diagnostics.split(" \\| ");
+        for (String entry : entries) {
+            if (!entry.isBlank()) {
+                getLogger().lifecycle("{} {}", makeRelativePath(source), sanitizeDiagnostic(entry));
+            }
+        }
+    }
+
+    private String makeRelativePath(final String absolutePath) {
+        try {
+            final Path projectDir = new File(projectDirPath).toPath();
+            final Path filePath = new File(absolutePath).toPath();
+            return projectDir.relativize(filePath).toString();
+        } catch (IllegalArgumentException | NullPointerException e) {
+            return absolutePath;
+        }
+    }
+
+    private String sanitizeDiagnostic(final String diagnostic) {
+        final String flattened = diagnostic.replace('\n', ' ').replace('\r', ' ');
+        final int expectingPos = flattened.indexOf(" expecting ");
+        final String compact = expectingPos > -1
+                ? flattened.substring(0, expectingPos) + " expecting <token-set>"
+                : flattened;
+        final int max = 280;
+        if (compact.length() <= max) {
+            return compact;
+        }
+        return compact.substring(0, max - 3) + "...";
     }
 }
 

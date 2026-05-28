@@ -1,5 +1,7 @@
 # Mini Grammar Test Data
 
+![Conformance](https://img.shields.io/badge/Conformance-Check--All%20Passing-brightgreen)
+
 These fixtures target:
 
 - `src/test/resources/grammars/mini/lexer.g4`

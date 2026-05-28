@@ -16,7 +16,10 @@ import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.OutputDirectory;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.work.DisableCachingByDefault;
 
 import javax.inject.Inject;
 import java.io.File;
@@ -40,6 +43,7 @@ import java.util.stream.Stream;
  * prefer {@link XmlAstGradleTask}, which exposes a more idiomatic Gradle property model.
  * Parsing is executed through dynamically loaded ANTLR lexer/parser classes.</p>
  */
+@DisableCachingByDefault(because = "XmlAstTask performs external parser loading and file-system driven conversion not yet declared for safe caching")
 public abstract class XmlAstTask extends DefaultTask {
 
     private final ConfigurableFileCollection sourceTrees;
@@ -82,6 +86,7 @@ public abstract class XmlAstTask extends DefaultTask {
      * @return source tree file collection.
      */
     @InputFiles
+    @PathSensitive(PathSensitivity.RELATIVE)
     public ConfigurableFileCollection getSourceTrees() {
         return sourceTrees;
     }
@@ -153,6 +158,7 @@ public abstract class XmlAstTask extends DefaultTask {
      */
     @Optional
     @InputFile
+    @PathSensitive(PathSensitivity.RELATIVE)
     public RegularFileProperty getCatalogFile() {
         return catalogFile;
     }

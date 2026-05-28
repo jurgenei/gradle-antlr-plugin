@@ -18,7 +18,10 @@ import org.gradle.api.tasks.InputFile;
 import org.gradle.api.tasks.InputDirectory;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.Optional;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.work.DisableCachingByDefault;
 
 import javax.inject.Inject;
 import java.io.File;
@@ -43,6 +46,7 @@ import java.util.stream.Stream;
  * runtime classpath injection for configuration-cache-friendly execution. Parsing is executed
  * through dynamically loaded ANTLR lexer/parser classes.</p>
  */
+@DisableCachingByDefault(because = "XmlAstGradleTask performs external parser loading and file-system driven conversion not yet declared for safe caching")
 public abstract class XmlAstGradleTask extends DefaultTask {
 
     private final DirectoryProperty sourceDirectory;
@@ -103,6 +107,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
      * @return directory property containing source files.
      */
     @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
     public DirectoryProperty getSourceDirectory() {
         return sourceDirectory;
     }
@@ -236,6 +241,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
      */
     @Optional
     @InputFile
+    @PathSensitive(PathSensitivity.RELATIVE)
     public RegularFileProperty getCatalogFile() {
         return catalogFile;
     }

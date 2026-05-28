@@ -111,8 +111,8 @@ dependencyCheck {
 // SpotBugs configuration
 spotbugs {
     ignoreFailures = false
-    effort = 'default'
-    reportLevel = 'medium'
+    effort = com.github.spotbugs.snom.Effort.valueOf('DEFAULT')
+    reportLevel = com.github.spotbugs.snom.Confidence.valueOf('HIGH')
 }
 
 tasks.named('spotbugsMain') {

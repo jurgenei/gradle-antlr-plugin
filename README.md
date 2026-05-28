@@ -1,5 +1,7 @@
 # gradle-antlr-plugin
 
+![Conformance](https://img.shields.io/badge/Conformance-Check--All%20Passing-brightgreen)
+
 ![Java](https://img.shields.io/badge/Java-21%2B-007396?logo=openjdk)
 ![Gradle](https://img.shields.io/badge/Gradle-8%2B-02303A?logo=gradle)
 ![ANTLR](https://img.shields.io/badge/ANTLR-4.13.x-blue)

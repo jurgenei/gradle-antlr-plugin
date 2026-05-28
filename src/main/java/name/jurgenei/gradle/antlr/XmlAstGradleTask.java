@@ -446,7 +446,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         final DynamicAntlrXmlAstConverter.ConversionStats extractedStats = findConversionStats(ex);
         DynamicAntlrXmlAstConverter.ConversionStats result = extractedStats;
         
-        final String message = "xmlast conversion failed: " + ex.getMessage();
+        final String message = "xmlast conversion failed: " + mostRelevantMessage(ex);
         logLifecycleFailure(ex);
         
         if (failOnError.get() && failOnTransformationError.get()) {
@@ -734,7 +734,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             }
             return;
         }
-        final String message = firstNonBlankMessage(throwable);
+        final String message = mostRelevantMessage(throwable);
         if (message != null) {
             getLogger().lifecycle("xmlast failure: {}", message);
         }
@@ -768,6 +768,25 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             current = current.getCause();
         }
         return null;
+    }
+
+    private String mostRelevantMessage(final Throwable throwable) {
+        String fallback = null;
+        Throwable current = throwable;
+        while (current != null) {
+            final String message = current.getMessage();
+            if (message != null && !message.isBlank()) {
+                if (fallback == null) {
+                    fallback = message;
+                }
+                if (!"Dynamic ANTLR conversion failed".equals(message)
+                        && !"xmlast conversion failed".equals(message)) {
+                    return message;
+                }
+            }
+            current = current.getCause();
+        }
+        return fallback;
     }
 
     private void logParseDiagnostics(final String parseMessage) {

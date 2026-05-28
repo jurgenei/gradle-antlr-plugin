@@ -174,6 +174,7 @@ public final class DynamicAntlrXmlAstConverter {
             Files.createDirectories(destinationRoot.toPath());
 
             try (RuntimeParserBinding binding = prepareParserBinding(classLoader, lexerClassName, parserClassName)) {
+                validateParserBinding(binding);
                 final List<ConversionJob> jobs = buildConversionJobs(sourceRoot, sourceFiles, destinationRoot, targetExtension);
                 
                 final ExecutionModel executionModel = parseExecutionModel(executionModelName);
@@ -375,7 +376,41 @@ public final class DynamicAntlrXmlAstConverter {
                             + " " + lineCount + ":" + byteCount + " parsed",
                     durationNanos);
         } catch (Exception ex) {
-            return ConversionOutcome.failure(job.index(), firstNonBlankMessage(ex), System.nanoTime() - fileStartNanos);
+            final String message = ex.getMessage();
+            if (message != null && message.startsWith("Parse failed for ")) {
+                return ConversionOutcome.failure(job.index(), message, System.nanoTime() - fileStartNanos);
+            }
+            return ConversionOutcome.failure(
+                    job.index(),
+                    "Conversion failed for " + job.sourceFile() + ": " + describeThrowable(ex),
+                    System.nanoTime() - fileStartNanos);
+        }
+    }
+
+    private void validateParserBinding(final RuntimeParserBinding binding) {
+        final ClassLoader parserClassLoader = binding.classLoader();
+        final String lexerName = binding.lexerClassName();
+        final String parserName = binding.parserClassName();
+
+        final Class<?> lexerRaw;
+        try {
+            lexerRaw = parserClassLoader.loadClass(lexerName);
+        } catch (ClassNotFoundException ex) {
+            throw new IllegalArgumentException("Lexer class not found on runtimeClasspath: " + lexerName, ex);
+        }
+
+        final Class<?> parserRaw;
+        try {
+            parserRaw = parserClassLoader.loadClass(parserName);
+        } catch (ClassNotFoundException ex) {
+            throw new IllegalArgumentException("Parser class not found on runtimeClasspath: " + parserName, ex);
+        }
+
+        if (!Lexer.class.isAssignableFrom(lexerRaw)) {
+            throw new IllegalArgumentException("Configured lexer class does not extend org.antlr.v4.runtime.Lexer: " + lexerName);
+        }
+        if (!Parser.class.isAssignableFrom(parserRaw)) {
+            throw new IllegalArgumentException("Configured parser class does not extend org.antlr.v4.runtime.Parser: " + parserName);
         }
     }
 
@@ -449,6 +484,14 @@ public final class DynamicAntlrXmlAstConverter {
             current = current.getCause();
         }
         return "Unknown conversion failure";
+    }
+
+    private String describeThrowable(final Throwable throwable) {
+        final String message = firstNonBlankMessage(throwable);
+        if (message == null || message.isBlank()) {
+            return throwable.getClass().getName();
+        }
+        return throwable.getClass().getName() + ": " + message;
     }
 
     private RuntimeParserBinding prepareParserBinding(
@@ -793,7 +836,7 @@ public final class DynamicAntlrXmlAstConverter {
         final Transformer transformer = TransformerFactory.newInstance().newTransformer();
         transformer.setOutputProperty(OutputKeys.INDENT, "yes");
         transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
-        transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2");
+        transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "1");
 
         final StringWriter writer = new StringWriter();
         transformer.transform(new DOMSource(document), new StreamResult(writer));
@@ -801,7 +844,7 @@ public final class DynamicAntlrXmlAstConverter {
     }
 
     private void compressRuleSubtree(final org.w3c.dom.Element element, final Map<String, String> pathIndex) {
-        if ("rule".equals(element.getTagName())) {
+        if (isRuleElement(element)) {
             final List<String> chainNames = new ArrayList<>();
             chainNames.add(element.getAttribute("name"));
 
@@ -830,7 +873,12 @@ public final class DynamicAntlrXmlAstConverter {
 
     private boolean hasSingleRuleChild(final org.w3c.dom.Element element) {
         final List<org.w3c.dom.Element> children = elementChildren(element);
-        return children.size() == 1 && "rule".equals(children.get(0).getTagName());
+        return children.size() == 1 && isRuleElement(children.get(0));
+    }
+
+    private boolean isRuleElement(final org.w3c.dom.Element element) {
+        final String tagName = element.getTagName();
+        return "rule".equals(tagName) || "r".equals(tagName);
     }
 
     private org.w3c.dom.Element singleElementChild(final org.w3c.dom.Element element) {
@@ -904,7 +952,7 @@ public final class DynamicAntlrXmlAstConverter {
         if (node instanceof RuleNode ruleNode) {
             final int ruleIndex = ruleNode.getRuleContext().getRuleIndex();
             final String ruleName = parser.getRuleNames()[ruleIndex];
-            final var element = document.createElement("rule");
+            final var element = document.createElement("r");
             element.setAttribute("name", ruleName);
             parent.appendChild(element);
             for (int i = 0; i < node.getChildCount(); i++) {
@@ -915,7 +963,7 @@ public final class DynamicAntlrXmlAstConverter {
 
         if (node instanceof TerminalNode terminalNode) {
             final Token token = terminalNode.getSymbol();
-            final var element = document.createElement("token");
+            final var element = document.createElement("t");
             element.setAttribute("type", tokenName(parser, token));
             element.setAttribute("line", Integer.toString(token.getLine()));
             element.setAttribute("column", Integer.toString(token.getCharPositionInLine()));

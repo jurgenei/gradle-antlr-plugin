@@ -412,7 +412,8 @@ public abstract class XmlAstGradleTask extends DefaultTask {
                     compression.get(),
                     continueOnError.get(),
                     executionModelValue,
-                    parallelismValue);
+                    parallelismValue,
+                    line -> getLogger().lifecycle(line));
         } catch (Exception ex) {
             conversionStats = handleConversionException(ex, failures, jobs, runStartNanos);
             fallbackFilesWithErrors = conversionStats == null ? findParseFailureMessages(ex).size() : 0;
@@ -445,17 +446,23 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             final long runStartNanos) {
         final DynamicAntlrXmlAstConverter.ConversionStats extractedStats = findConversionStats(ex);
         DynamicAntlrXmlAstConverter.ConversionStats result = extractedStats;
-        
-        final String message = "xmlast conversion failed: " + mostRelevantMessage(ex);
+
+        final List<String> parseMessages = findParseFailureMessages(ex);
+        final String message;
+        if (suppressStackTrace.get() && !parseMessages.isEmpty()) {
+            message = "xmlast conversion failed: " + parseMessages.size() + " file(s) failed; see [FAILURE] lines above";
+        } else {
+            message = "xmlast conversion failed: " + mostRelevantMessage(ex);
+        }
         logLifecycleFailure(ex);
-        
+
         if (failOnError.get() && failOnTransformationError.get()) {
             if (suppressStackTrace.get()) {
                 throw new GradleException(message);
             }
             throw new GradleException(message, ex);
         }
-        
+
         failures.add(message);
         if (suppressStackTrace.get()) {
             getLogger().warn(message);
@@ -729,8 +736,10 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     private void logLifecycleFailure(final Throwable throwable) {
         final List<String> parseMessages = findParseFailureMessages(throwable);
         if (!parseMessages.isEmpty()) {
-            for (String parseMessage : parseMessages) {
-                logParseDiagnostics(parseMessage);
+            if (!suppressStackTrace.get()) {
+                for (String parseMessage : parseMessages) {
+                    logParseDiagnostics(parseMessage);
+                }
             }
             return;
         }

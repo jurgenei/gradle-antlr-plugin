@@ -42,6 +42,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
@@ -65,6 +66,8 @@ import java.util.stream.Stream;
  * as superclass types are available through the provided runtime classloader classpath.</p>
  */
 public final class DynamicAntlrXmlAstConverter {
+    private static final int MAX_OUTCOME_LOG_LINE_LENGTH = 225;
+    private static final String LOG_TRUNCATION_SUFFIX = "...";
 
     /**
      * Converts a list of source files relative to a source root into XML AST output files.
@@ -152,10 +155,42 @@ public final class DynamicAntlrXmlAstConverter {
             final boolean continueOnError,
             final String executionModelName,
             final int configuredParallelism) {
+        return convertFileTreeWithStats(
+                sourceRoot,
+                sourceFiles,
+                destinationRoot,
+                targetExtension,
+                classLoader,
+                lexerClassName,
+                parserClassName,
+                startRule,
+                compression,
+                continueOnError,
+                executionModelName,
+                configuredParallelism,
+                System.out::println);
+    }
+
+    public ConversionStats convertFileTreeWithStats(
+            final File sourceRoot,
+            final List<File> sourceFiles,
+            final File destinationRoot,
+            final String targetExtension,
+            final ClassLoader classLoader,
+            final String lexerClassName,
+            final String parserClassName,
+            final String startRule,
+            final boolean compression,
+            final boolean continueOnError,
+            final String executionModelName,
+            final int configuredParallelism,
+            final Consumer<String> outcomeLogger) {
         // Guard: Parallelism constraints
         if (configuredParallelism < 1) {
             throw new IllegalArgumentException("configuredParallelism must be >= 1, got: " + configuredParallelism);
         }
+
+        final Consumer<String> safeOutcomeLogger = outcomeLogger == null ? System.out::println : outcomeLogger;
 
         // Guard: Execution model validation
         if (executionModelName != null && !executionModelName.isBlank()) {
@@ -190,7 +225,7 @@ public final class DynamicAntlrXmlAstConverter {
                         executionModel,
                         workerLimit);
 
-                return processOutcomes(outcomes, runStartNanos);
+                return processOutcomes(outcomes, runStartNanos, safeOutcomeLogger);
             }
         } catch (ConversionFailedException ex) {
             throw ex;
@@ -225,37 +260,20 @@ public final class DynamicAntlrXmlAstConverter {
      */
     private ConversionStats processOutcomes(
             final List<ConversionOutcome> outcomes,
-            final long runStartNanos) {
+            final long runStartNanos,
+            final Consumer<String> outcomeLogger) {
         final List<String> failures = new ArrayList<>();
-        final List<String> successes = new ArrayList<>();
         long cumulativeFileProcessingNanos = 0L;
 
         outcomes.sort(Comparator.comparingInt(ConversionOutcome::index));
-        
+
         for (ConversionOutcome outcome : outcomes) {
             cumulativeFileProcessingNanos += outcome.durationNanos();
             if (outcome.success()) {
-                successes.add(outcome.successLine());
+                outcomeLogger.accept(truncateOutcomeLogLine("[SUCCESS] " + outcome.successLine()));
             } else {
+                outcomeLogger.accept(truncateOutcomeLogLine("[FAILURE] " + outcome.failureMessage()));
                 failures.add(outcome.failureMessage());
-            }
-        }
-
-        for (String success : successes) {
-            System.out.println(success);
-        }
-        
-        // Print detailed parse errors inline
-        for (String failure : failures) {
-            if (failure.startsWith("Parse failed for")) {
-                final int colonIdx = failure.indexOf(": ");
-                if (colonIdx > 0) {
-                    final String filePath = failure.substring("Parse failed for ".length(), colonIdx);
-                    final String messages = failure.substring(colonIdx + 2);
-                    for (String msg : messages.split(" \\| ")) {
-                        System.out.println(filePath + " " + msg.trim());
-                    }
-                }
             }
         }
 
@@ -264,7 +282,7 @@ public final class DynamicAntlrXmlAstConverter {
                 failures.size(),
                 System.nanoTime() - runStartNanos,
                 cumulativeFileProcessingNanos);
-        
+
         if (!failures.isEmpty()) {
             throw new ConversionFailedException(String.join(" || ", failures), stats);
         }
@@ -1098,6 +1116,17 @@ public final class DynamicAntlrXmlAstConverter {
 
     private String toPortablePath(final Path relativePath) {
         return relativePath.toString().replace(File.separatorChar, '/');
+    }
+
+    private String truncateOutcomeLogLine(final String line) {
+        if (line == null) {
+            return "";
+        }
+        if (line.length() <= MAX_OUTCOME_LOG_LINE_LENGTH) {
+            return line;
+        }
+        final int prefixLength = Math.max(0, MAX_OUTCOME_LOG_LINE_LENGTH - LOG_TRUNCATION_SUFFIX.length());
+        return line.substring(0, prefixLength) + LOG_TRUNCATION_SUFFIX;
     }
 
 }

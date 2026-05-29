@@ -54,6 +54,9 @@ import java.util.concurrent.Semaphore;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
+import org.w3c.dom.Element;
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
 
 /**
  * Converts SQL input files to XML AST output using dynamically loaded ANTLR lexer/parser classes.
@@ -861,13 +864,13 @@ public final class DynamicAntlrXmlAstConverter {
         return writer.toString();
     }
 
-    private void compressRuleSubtree(final org.w3c.dom.Element element, final Map<String, String> pathIndex) {
+    private void compressRuleSubtree(final Element element, final Map<String, String> pathIndex) {
         if (isRuleElement(element)) {
             final List<String> chainNames = new ArrayList<>();
             chainNames.add(element.getAttribute("name"));
 
             while (hasSingleRuleChild(element)) {
-                final org.w3c.dom.Element childRule = singleElementChild(element);
+                final Element childRule = singleElementChild(element);
                 chainNames.add(childRule.getAttribute("name"));
 
                 element.removeChild(childRule);
@@ -883,32 +886,32 @@ public final class DynamicAntlrXmlAstConverter {
             }
         }
 
-        final List<org.w3c.dom.Element> children = elementChildren(element);
-        for (org.w3c.dom.Element child : children) {
+        final List<Element> children = elementChildren(element);
+        for (Element child : children) {
             compressRuleSubtree(child, pathIndex);
         }
     }
 
-    private boolean hasSingleRuleChild(final org.w3c.dom.Element element) {
-        final List<org.w3c.dom.Element> children = elementChildren(element);
+    private boolean hasSingleRuleChild(final Element element) {
+        final List<Element> children = elementChildren(element);
         return children.size() == 1 && isRuleElement(children.get(0));
     }
 
-    private boolean isRuleElement(final org.w3c.dom.Element element) {
+    private boolean isRuleElement(final Element element) {
         final String tagName = element.getTagName();
         return "rule".equals(tagName) || "r".equals(tagName);
     }
 
-    private org.w3c.dom.Element singleElementChild(final org.w3c.dom.Element element) {
+    private Element singleElementChild(final Element element) {
         return elementChildren(element).get(0);
     }
 
-    private List<org.w3c.dom.Element> elementChildren(final org.w3c.dom.Element element) {
-        final List<org.w3c.dom.Element> children = new ArrayList<>();
-        final org.w3c.dom.NodeList nodes = element.getChildNodes();
+    private List<Element> elementChildren(final Element element) {
+        final List<Element> children = new ArrayList<>();
+        final NodeList nodes = element.getChildNodes();
         for (int i = 0; i < nodes.getLength(); i++) {
             final org.w3c.dom.Node node = nodes.item(i);
-            if (node instanceof org.w3c.dom.Element child) {
+            if (node instanceof Element child) {
                 children.add(child);
             }
         }
@@ -946,15 +949,15 @@ public final class DynamicAntlrXmlAstConverter {
     }
 
     private void appendPathIndex(
-            final org.w3c.dom.Document document,
-            final org.w3c.dom.Element root,
+            final Document document,
+            final Element root,
             final Map<String, String> pathIndex) {
         if (pathIndex.isEmpty()) {
             return;
         }
-        final org.w3c.dom.Element index = document.createElement("pathIndex");
+        final Element index = document.createElement("pathIndex");
         for (Map.Entry<String, String> entry : pathIndex.entrySet()) {
-            final org.w3c.dom.Element path = document.createElement("path");
+            final Element path = document.createElement("path");
             path.setAttribute("id", entry.getKey());
             path.setAttribute("value", entry.getValue());
             index.appendChild(path);
@@ -963,8 +966,8 @@ public final class DynamicAntlrXmlAstConverter {
     }
 
     private void appendTree(
-            final org.w3c.dom.Document document,
-            final org.w3c.dom.Element parent,
+            final Document document,
+            final Element parent,
             final ParseTree node,
             final Parser parser) {
         if (node instanceof RuleNode ruleNode) {

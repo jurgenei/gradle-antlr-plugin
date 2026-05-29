@@ -416,8 +416,15 @@ public abstract class XmlAstGradleTask extends DefaultTask {
                     parallelismValue,
                     line -> getLogger().lifecycle(line));
         } catch (Exception ex) {
+            // Preserve converter stats for summary even when fail-fast rethrows.
+            conversionStats = findConversionStats(ex);
+            if (conversionStats != null) {
+                fallbackFilesWithErrors = Math.max(0, conversionStats.filesWithErrors());
+            }
             conversionStats = handleConversionException(ex, failures, jobs, runStartNanos);
-            fallbackFilesWithErrors = conversionStats == null ? findParseFailureMessages(ex).size() : 0;
+            if (conversionStats == null && fallbackFilesWithErrors == 0) {
+                fallbackFilesWithErrors = findParseFailureMessages(ex).size();
+            }
         } finally {
             if (conversionStats == null) {
                 conversionStats = new DynamicAntlrXmlAstConverter.ConversionStats(
@@ -683,6 +690,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             final File targetFile = destinationRoot.resolve(mapTarget(relativePath.toString())).toFile();
             if (!targetFile.exists() || sourceFile.lastModified() >= targetFile.lastModified() || targetFile.length() == 0L) {
                 toConvert.add(sourceFile);
+            } else {
+                final String relative = relativePath.toString().replace(File.separatorChar, '/');
+                getLogger().lifecycle("{} + SKIP", relative);
             }
         }
         return toConvert;

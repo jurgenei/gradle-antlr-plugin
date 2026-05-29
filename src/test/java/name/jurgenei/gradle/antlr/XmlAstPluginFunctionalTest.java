@@ -382,6 +382,136 @@ public class XmlAstPluginFunctionalTest {
         }
     }
 
+    @Test
+    public void continuesOnMalformedInputWhenFailOnErrorDisabled() throws Exception {
+        final File projectDir = temporaryFolder.newFolder("functional-continue-on-malformed");
+        writeSettings(projectDir);
+        writeBuildFile(projectDir, """
+                plugins {
+                    id 'java'
+                    id 'antlr'
+                    id 'name.jurgenei.gradle.antlr'
+                }
+
+                repositories {
+                    mavenCentral()
+                }
+
+                dependencies {
+                    antlr 'org.antlr:antlr4:4.13.1'
+                    implementation 'org.antlr:antlr4-runtime:4.13.1'
+                }
+
+                generateGrammarSource {
+                    arguments += ['-package', 'e2e']
+                }
+
+                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                    sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
+                    destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
+                    parserClassName.set('e2e.MiniParser')
+                    lexerClassName.set('e2e.MiniLexer')
+                    startRule.set('script')
+                    targetExtension.set('.xml')
+                    continueOnError.set(true)
+                    failOnError.set(false)
+                    failOnTransformationError.set(false)
+                    suppressStackTrace.set(true)
+                }
+                """);
+
+        writeFile(projectDir, "src/main/antlr/MiniLexer.g4", """
+                lexer grammar MiniLexer;
+
+                SELECT: 'SELECT';
+                FROM: 'FROM';
+                STAR: '*';
+                SEMI: ';';
+                IDENTIFIER: [a-zA-Z_] [a-zA-Z_0-9]*;
+                WS: [ \\t\\r\\n]+ -> skip;
+                """);
+
+        writeFile(projectDir, "src/main/antlr/MiniParser.g4", """
+                parser grammar MiniParser;
+                options { tokenVocab=MiniLexer; }
+
+                script: SELECT STAR FROM IDENTIFIER SEMI EOF;
+                """);
+
+        writeFile(projectDir, "src/main/sql/valid.sql", "SELECT * FROM employees;");
+        final Path malformed = projectDir.toPath().resolve("src/main/sql/malformed.sql");
+        Files.createDirectories(malformed.getParent());
+        Files.write(malformed, new byte[]{(byte) 0xC3, (byte) 0x28});
+
+        final BuildResult result = run(projectDir, "xmlast", "--rerun-tasks");
+
+        Assert.assertTrue("Expected build to continue despite malformed input", result.getOutput().contains("BUILD SUCCESSFUL"));
+        Assert.assertTrue("Expected success line for valid input", result.getOutput().contains("[SUCCESS]"));
+        Assert.assertTrue("Expected summary to report one file with error", result.getOutput().contains("Files with errors          : 1"));
+        Assert.assertTrue("Expected valid file output to be generated", Files.exists(projectDir.toPath().resolve("build/xmlast/valid.xml")));
+    }
+
+    @Test
+    public void logsSkipForUpToDateFilesOnRerunTasks() throws Exception {
+        final File projectDir = temporaryFolder.newFolder("functional-skip-notice");
+        writeSettings(projectDir);
+        writeBuildFile(projectDir, """
+                plugins {
+                    id 'java'
+                    id 'antlr'
+                    id 'name.jurgenei.gradle.antlr'
+                }
+
+                repositories {
+                    mavenCentral()
+                }
+
+                dependencies {
+                    antlr 'org.antlr:antlr4:4.13.1'
+                    implementation 'org.antlr:antlr4-runtime:4.13.1'
+                }
+
+                generateGrammarSource {
+                    arguments += ['-package', 'e2e']
+                }
+
+                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                    sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
+                    destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
+                    parserClassName.set('e2e.MiniParser')
+                    lexerClassName.set('e2e.MiniLexer')
+                    startRule.set('script')
+                    targetExtension.set('.xml')
+                    force.set(false)
+                }
+                """);
+
+        writeFile(projectDir, "src/main/antlr/MiniLexer.g4", """
+                lexer grammar MiniLexer;
+
+                SELECT: 'SELECT';
+                FROM: 'FROM';
+                STAR: '*';
+                SEMI: ';';
+                IDENTIFIER: [a-zA-Z_] [a-zA-Z_0-9]*;
+                WS: [ \\t\\r\\n]+ -> skip;
+                """);
+
+        writeFile(projectDir, "src/main/antlr/MiniParser.g4", """
+                parser grammar MiniParser;
+                options { tokenVocab=MiniLexer; }
+
+                script: SELECT STAR FROM IDENTIFIER SEMI EOF;
+                """);
+
+        writeFile(projectDir, "src/main/sql/sample.sql", "SELECT * FROM employees;");
+
+        run(projectDir, "xmlast", "--rerun-tasks");
+        final BuildResult secondRun = run(projectDir, "xmlast", "--rerun-tasks");
+
+        Assert.assertTrue("Expected skip notice for up-to-date file", secondRun.getOutput().contains("sample.sql + SKIP"));
+    }
+
     private static HttpServer startStaticServer(final Path rootDirectory) throws IOException {
         final HttpServer server = HttpServer.create(new java.net.InetSocketAddress("localhost", 0), 0);
         server.createContext("/", exchange -> {

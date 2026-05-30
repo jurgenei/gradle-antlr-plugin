@@ -97,7 +97,8 @@ public final class DynamicAntlrXmlAstConverter {
             final String parserClassName,
             final String startRule,
             final boolean compression,
-            final boolean continueOnError) {
+            final boolean continueOnError,
+            final Consumer<String> outcomeLogger) {
         // Guard: Null checks
         java.util.Objects.requireNonNull(sourceRoot, "sourceRoot cannot be null");
         java.util.Objects.requireNonNull(sourceFiles, "sourceFiles cannot be null");
@@ -142,37 +143,11 @@ public final class DynamicAntlrXmlAstConverter {
                 compression,
                 continueOnError,
                 GrammarConstants.EXECUTION_MODEL_SEQUENTIAL,
-                GrammarConstants.DEFAULT_PARALLELISM);
+                GrammarConstants.DEFAULT_PARALLELISM,
+                outcomeLogger
+                );
     }
 
-    public ConversionStats convertFileTreeWithStats(
-            final File sourceRoot,
-            final List<File> sourceFiles,
-            final File destinationRoot,
-            final String targetExtension,
-            final ClassLoader classLoader,
-            final String lexerClassName,
-            final String parserClassName,
-            final String startRule,
-            final boolean compression,
-            final boolean continueOnError,
-            final String executionModelName,
-            final int configuredParallelism) {
-        return convertFileTreeWithStats(
-                sourceRoot,
-                sourceFiles,
-                destinationRoot,
-                targetExtension,
-                classLoader,
-                lexerClassName,
-                parserClassName,
-                startRule,
-                compression,
-                continueOnError,
-                executionModelName,
-                configuredParallelism,
-                System.out::println);
-    }
 
     public ConversionStats convertFileTreeWithStats(
             final File sourceRoot,

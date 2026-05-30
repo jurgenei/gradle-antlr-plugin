@@ -692,7 +692,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
                 toConvert.add(sourceFile);
             } else {
                 final String relative = relativePath.toString().replace(File.separatorChar, '/');
-                getLogger().lifecycle("{} + SKIP", relative);
+                getLogger().lifecycle("[SKIP] {}", relative);
             }
         }
         return toConvert;

@@ -509,7 +509,7 @@ public class XmlAstPluginFunctionalTest {
         run(projectDir, "xmlast", "--rerun-tasks");
         final BuildResult secondRun = run(projectDir, "xmlast", "--rerun-tasks");
 
-        Assert.assertTrue("Expected skip notice for up-to-date file", secondRun.getOutput().contains("sample.sql + SKIP"));
+        Assert.assertTrue("Expected skip notice for up-to-date file", secondRun.getOutput().contains("[SKIP] sample.sql"));
     }
 
     private static HttpServer startStaticServer(final Path rootDirectory) throws IOException {

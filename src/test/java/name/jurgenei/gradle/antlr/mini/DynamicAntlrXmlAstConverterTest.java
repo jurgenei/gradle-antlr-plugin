@@ -39,7 +39,8 @@ public class DynamicAntlrXmlAstConverterTest {
                 MiniParser.class.getName(),
                 "script",
                 false,
-                false);
+                false,
+                null);
 
         for (Path sourcePath : listSqlFiles(VALID_DIR)) {
             final String fileName = sourcePath.getFileName().toString();
@@ -68,7 +69,8 @@ public class DynamicAntlrXmlAstConverterTest {
                 MiniParser.class.getName(),
                 "script",
                 true,
-                false);
+                false,
+                null);
 
         final Path xmlPath = outputDir.toPath().resolve("01_select_star.xml");
         Assert.assertTrue("Expected XML output", Files.exists(xmlPath));
@@ -92,7 +94,8 @@ public class DynamicAntlrXmlAstConverterTest {
                 MiniParser.class.getName(),
                 "script",
                 false,
-                false);
+                false,
+                null);
     }
 
     @Test
@@ -111,7 +114,8 @@ public class DynamicAntlrXmlAstConverterTest {
                         MiniParser.class.getName(),
                         "script",
                         false,
-                        false));
+                        false,
+                        null));
 
         Assert.assertTrue(ex.getMessage().contains("sourceFiles cannot be empty"));
     }
@@ -133,7 +137,8 @@ public class DynamicAntlrXmlAstConverterTest {
                         MiniParser.class.getName(),
                         "   ",
                         false,
-                        false));
+                        false,
+                        null));
 
         Assert.assertTrue(ex.getMessage().contains("startRule cannot be blank"));
     }
@@ -157,7 +162,7 @@ public class DynamicAntlrXmlAstConverterTest {
                         false,
                         false,
                         "BAD_MODEL",
-                        1));
+                        1, null));
 
         Assert.assertTrue(ex.getMessage().contains("Invalid executionModelName"));
     }
@@ -181,7 +186,7 @@ public class DynamicAntlrXmlAstConverterTest {
                         false,
                         false,
                         "SEQUENTIAL",
-                        0));
+                        0,null));
 
         Assert.assertTrue(ex.getMessage().contains("configuredParallelism must be >= 1"));
     }

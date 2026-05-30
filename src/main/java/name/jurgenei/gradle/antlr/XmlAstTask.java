@@ -280,7 +280,8 @@ public abstract class XmlAstTask extends DefaultTask {
                             resolvedConfig.parserClassName(),
                             resolvedConfig.startRule(),
                             compression.get(),
-                            true);
+                            true,
+                            m -> getLogger().lifecycle(m));
                 }
             }
         } catch (Exception ex) {

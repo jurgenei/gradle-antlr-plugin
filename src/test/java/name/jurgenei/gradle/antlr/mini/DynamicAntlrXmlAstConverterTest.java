@@ -6,6 +6,9 @@ import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -13,8 +16,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
+import javax.xml.parsers.DocumentBuilderFactory;
 
 public class DynamicAntlrXmlAstConverterTest {
 
@@ -77,6 +83,58 @@ public class DynamicAntlrXmlAstConverterTest {
         final String xml = Files.readString(xmlPath, StandardCharsets.UTF_8);
         Assert.assertTrue("Expected pathIndex section", xml.contains("<pathIndex>"));
         Assert.assertTrue("Expected compressed path id attribute", xml.contains("pathId=\""));
+    }
+
+    @Test
+    public void compressionPathIndexProvidesStableLookupForFlowgraphStyleMatching() throws Exception {
+        final File outputDir = temporaryFolder.newFolder("xml-ast-compressed-lookup");
+        final List<File> inputs = List.of(VALID_DIR.resolve("04_mixed_script.sql").toFile());
+
+        new DynamicAntlrXmlAstConverter().convertFileTree(
+                VALID_DIR.toFile(),
+                inputs,
+                outputDir,
+                ".xml",
+                MiniLexer.class.getClassLoader(),
+                MiniLexer.class.getName(),
+                MiniParser.class.getName(),
+                "script",
+                true,
+                false,
+                null);
+
+        final Path xmlPath = outputDir.toPath().resolve("04_mixed_script.xml");
+        Assert.assertTrue("Expected XML output", Files.exists(xmlPath));
+
+        final Document document = parseXml(xmlPath);
+        final Map<String, String> index = readPathIndex(document);
+        Assert.assertFalse("Expected non-empty pathIndex for compressed output", index.isEmpty());
+
+        final NodeList compressedRules = document.getElementsByTagName("r");
+        int compressedRuleCount = 0;
+
+        for (int i = 0; i < compressedRules.getLength(); i++) {
+            final Element rule = (Element) compressedRules.item(i);
+            if (!rule.hasAttribute("pathId")) {
+                continue;
+            }
+            compressedRuleCount++;
+
+            final String pathId = rule.getAttribute("pathId");
+            final String indexedPath = index.get(pathId);
+            Assert.assertNotNull("Every pathId on a rule must exist in <pathIndex>", indexedPath);
+
+            final String[] parts = indexedPath.split("/");
+            Assert.assertTrue("Compressed path must contain a chain (>= 2 segments)", parts.length >= 2);
+            Assert.assertEquals("Path must start with the current rule name", rule.getAttribute("name"), parts[0]);
+
+            // Guard against duplicate leading segments (regression for chain collection bugs).
+            for (int p = 1; p < parts.length; p++) {
+                Assert.assertNotEquals("Adjacent duplicate path segments are invalid", parts[p - 1], parts[p]);
+            }
+        }
+
+        Assert.assertTrue("Expected at least one compressed rule with pathId", compressedRuleCount > 0);
     }
 
     @Test(expected = GradleException.class)
@@ -199,6 +257,22 @@ public class DynamicAntlrXmlAstConverterTest {
                     .sorted(Comparator.comparing(path -> path.getFileName().toString()))
                     .toList();
         }
+    }
+
+    private static Document parseXml(final Path xmlPath) throws Exception {
+        final var factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(false);
+        return factory.newDocumentBuilder().parse(xmlPath.toFile());
+    }
+
+    private static Map<String, String> readPathIndex(final Document document) {
+        final Map<String, String> index = new HashMap<>();
+        final NodeList paths = document.getElementsByTagName("path");
+        for (int i = 0; i < paths.getLength(); i++) {
+            final Element path = (Element) paths.item(i);
+            index.put(path.getAttribute("id"), path.getAttribute("value"));
+        }
+        return index;
     }
 }
 

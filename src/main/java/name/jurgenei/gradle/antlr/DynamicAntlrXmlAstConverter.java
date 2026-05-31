@@ -271,7 +271,7 @@ public final class DynamicAntlrXmlAstConverter {
         if (executionModel == ExecutionModel.SEQUENTIAL || workerLimit <= 1 || jobs.size() == 1) {
             final List<ConversionOutcome> outcomes = new ArrayList<>();
             for (ConversionJob job : jobs) {
-                final ConversionOutcome outcome = processSingleFile(job, binding, startRule, compression);
+                final ConversionOutcome outcome = processSingleFile(job, binding, startRule, compression, outcomeLogger);
                 outcomes.add(outcome);
                 emitOutcomeLog(outcome, outcomeLogger);
                 if (!continueOnError && !outcome.success()) {
@@ -292,7 +292,7 @@ public final class DynamicAntlrXmlAstConverter {
                     public ConversionOutcome call() throws Exception {
                         permits.acquire();
                         try {
-                            return processSingleFile(job, binding, startRule, compression);
+                            return processSingleFile(job, binding, startRule, compression, outcomeLogger);
                         } finally {
                             permits.release();
                         }
@@ -352,7 +352,8 @@ public final class DynamicAntlrXmlAstConverter {
             final ConversionJob job,
             final RuntimeParserBinding binding,
             final String startRule,
-            final boolean compression) {
+            final boolean compression,
+            final Consumer<String> outcomeLogger) {
         final long fileStartNanos = System.nanoTime();
         currentBinding.set(binding);
         try {
@@ -384,11 +385,11 @@ public final class DynamicAntlrXmlAstConverter {
         } finally {
             currentBinding.remove();
             binding.clearDFACaches();
-            maybeRunAggressiveGc();
+            maybeRunAggressiveGc(outcomeLogger);
         }
     }
 
-    private void maybeRunAggressiveGc() {
+    private void maybeRunAggressiveGc(final Consumer<String> gcLogger) {
         if (!Boolean.parseBoolean(System.getProperty(GC_ENABLED_PROPERTY, "false"))) {
             return;
         }
@@ -416,8 +417,37 @@ public final class DynamicAntlrXmlAstConverter {
         }
 
         final int processed = completedFilesCounter.incrementAndGet();
-        if (processed % gcEveryFiles == 0 && heapUsedPercent() >= heapThresholdPercent) {
-            System.gc();
+        if (processed % gcEveryFiles != 0 || heapUsedPercent() < heapThresholdPercent) {
+            return;
+        }
+
+        final Runtime runtime = Runtime.getRuntime();
+        final long maxBefore = runtime.maxMemory();
+        final long usedBefore = runtime.totalMemory() - runtime.freeMemory();
+
+        System.gc();
+
+        final long maxAfter = runtime.maxMemory();
+        final long totalAfter = runtime.totalMemory();
+        final long freeAfter = runtime.freeMemory();
+        final long usedAfter = totalAfter - freeAfter;
+
+        final long reclaimedBytes = Math.max(0L, usedBefore - usedAfter);
+        final double claimedPctOfMax = maxAfter <= 0L ? 0.0 : (usedAfter * 100.0) / maxAfter;
+        final double freePctOfMax = maxAfter <= 0L ? 0.0 : (freeAfter * 100.0) / maxAfter;
+
+        if (gcLogger != null) {
+            gcLogger.accept(String.format(
+                    java.util.Locale.ROOT,
+                    "[GC] files=%d reclaimed=%d MB heapUsed=%d MB (%.2f%% claimed) heapFree=%d MB (%.2f%% free) max=%d MB",
+                    processed,
+                    reclaimedBytes / (1024 * 1024),
+                    usedAfter / (1024 * 1024),
+                    claimedPctOfMax,
+                    freeAfter / (1024 * 1024),
+                    freePctOfMax,
+                    maxAfter / (1024 * 1024)
+            ));
         }
     }
 

@@ -71,6 +71,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     private final Property<String> startRule;
     private final Property<Boolean> compression;
     private final Property<Boolean> enableDFAMonitoring;
+    private final Property<Boolean> aggressiveGc;
+    private final Property<Integer> gcEveryFiles;
+    private final Property<Integer> gcHeapThresholdPercent;
     private final ConfigurableFileCollection runtimeClasspath;
 
     @Inject
@@ -96,6 +99,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         startRule = objects.property(String.class).convention(GrammarConstants.DEFAULT_START_RULE);
         compression = objects.property(Boolean.class).convention(false);
         enableDFAMonitoring = objects.property(Boolean.class).convention(false);
+        aggressiveGc = objects.property(Boolean.class).convention(false);
+        gcEveryFiles = objects.property(Integer.class).convention(25);
+        gcHeapThresholdPercent = objects.property(Integer.class).convention(80);
         runtimeClasspath = objects.fileCollection();
 
         sourceDirectory.convention(getProject().getLayout().getProjectDirectory().dir("src/main/sql"));
@@ -327,6 +333,42 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     }
 
     /**
+     * Enables periodic forced GC during long parsing runs.
+     *
+     * <p>This is a pragmatic safety valve for extremely large conversion batches where
+     * parser memory pressure can exceed heap even in sequential mode.</p>
+     *
+     * @return aggressive-GC flag property.
+     */
+    @Input
+    public Property<Boolean> getAggressiveGc() {
+        return aggressiveGc;
+    }
+
+    /**
+     * Number of completed files between forced GC cycles when aggressive GC is enabled.
+     *
+     * @return files-per-gc property.
+     */
+    @Input
+    public Property<Integer> getGcEveryFiles() {
+        return gcEveryFiles;
+    }
+
+    /**
+     * Heap-used percent threshold for aggressive GC trigger.
+     *
+     * <p>When aggressive GC is enabled, forced GC runs only when heap usage is at or above
+     * this percentage at the configured file interval.</p>
+     *
+     * @return heap threshold percent property.
+     */
+    @Input
+    public Property<Integer> getGcHeapThresholdPercent() {
+        return gcHeapThresholdPercent;
+    }
+
+    /**
      * Runtime classpath used to load converter classes and dependencies.
      *
      * @return classpath file collection.
@@ -400,21 +442,35 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             logHeapMemory("Initial state");
         }
 
-        try (URLClassLoader classLoader = createRuntimeClassLoader()) {
-            conversionStats = new DynamicAntlrXmlAstConverter().convertFileTreeWithStats(
-                    sourceDir,
-                    jobs,
-                    destinationDir,
-                    extension,
-                    classLoader,
-                    resolvedConfig.lexerClassName(),
-                    resolvedConfig.parserClassName(),
-                    resolvedConfig.startRule(),
-                    compression.get(),
-                    continueOnError.get(),
-                    executionModelValue,
-                    parallelismValue,
-                    line -> getLogger().lifecycle(line));
+        final String previousGcEnabled = System.getProperty("xmlast.gc.enabled");
+        final String previousGcEveryFiles = System.getProperty("xmlast.gc.every.files");
+        final String previousGcHeapThresholdPercent = System.getProperty("xmlast.gc.heap.threshold.percent");
+        if (aggressiveGc.get()) {
+            final int gcFrequency = Math.max(1, gcEveryFiles.get());
+            final int heapThreshold = Math.max(1, Math.min(100, gcHeapThresholdPercent.get()));
+            System.setProperty("xmlast.gc.enabled", "true");
+            System.setProperty("xmlast.gc.every.files", Integer.toString(gcFrequency));
+            System.setProperty("xmlast.gc.heap.threshold.percent", Integer.toString(heapThreshold));
+            getLogger().lifecycle("xmlast aggressive GC enabled (every {} file(s), heap >= {}%)", gcFrequency, heapThreshold);
+        }
+
+        try {
+            try (URLClassLoader classLoader = createRuntimeClassLoader()) {
+                conversionStats = new DynamicAntlrXmlAstConverter().convertFileTreeWithStats(
+                        sourceDir,
+                        jobs,
+                        destinationDir,
+                        extension,
+                        classLoader,
+                        resolvedConfig.lexerClassName(),
+                        resolvedConfig.parserClassName(),
+                        resolvedConfig.startRule(),
+                        compression.get(),
+                        continueOnError.get(),
+                        executionModelValue,
+                        parallelismValue,
+                        line -> getLogger().lifecycle(line));
+            }
         } catch (Exception ex) {
             // Preserve converter stats for summary even when fail-fast rethrows.
             conversionStats = findConversionStats(ex);
@@ -426,6 +482,22 @@ public abstract class XmlAstGradleTask extends DefaultTask {
                 fallbackFilesWithErrors = findParseFailureMessages(ex).size();
             }
         } finally {
+            if (previousGcEnabled == null) {
+                System.clearProperty("xmlast.gc.enabled");
+            } else {
+                System.setProperty("xmlast.gc.enabled", previousGcEnabled);
+            }
+            if (previousGcEveryFiles == null) {
+                System.clearProperty("xmlast.gc.every.files");
+            } else {
+                System.setProperty("xmlast.gc.every.files", previousGcEveryFiles);
+            }
+            if (previousGcHeapThresholdPercent == null) {
+                System.clearProperty("xmlast.gc.heap.threshold.percent");
+            } else {
+                System.setProperty("xmlast.gc.heap.threshold.percent", previousGcHeapThresholdPercent);
+            }
+
             if (conversionStats == null) {
                 conversionStats = new DynamicAntlrXmlAstConverter.ConversionStats(
                         jobs.size(),

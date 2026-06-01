@@ -1,6 +1,7 @@
 plugins {
     id 'antlr'
     id 'java-gradle-plugin'
+    id 'com.gradle.plugin-publish' version '2.1.1'
     id 'jacoco'
     id 'maven-publish'
     id 'signing'
@@ -34,12 +35,16 @@ dependencies {
 }
 
 gradlePlugin {
+    website = 'https://github.com/jurgenei/gradle-antlr-plugin'
+    vcsUrl = 'https://github.com/jurgenei/gradle-antlr-plugin.git'
+
     plugins {
         antlrPlugin {
             id = 'name.jurgenei.gradle.antlr'
             implementationClass = 'name.jurgenei.gradle.antlr.XmlAstPlugin'
             displayName = 'Antlr XmlAst plugin'
             description = 'Converts source files to XML AST using pluggable ANTLR grammars.'
+            tags = ['antlr', 'xml', 'ast', 'sql', 'parser']
         }
     }
 }

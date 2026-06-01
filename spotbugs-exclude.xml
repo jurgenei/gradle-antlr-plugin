@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <Match>
+        <!-- DM_GC: Explicit garbage collection; extremely dubious except in benchmarking code -->
+        <!-- https://spotbugs.readthedocs.io/en/stable/bugDescriptions.html#dm-explicit-garbage-collection-extremely-dubious-except-in-benchmarking-code-dm-gc -->
+        <Or>
+            <Class name="name.jurgenei.gradle.antlr.DynamicAntlrXmlAstConverter" />
+        </Or>
+        <Bug pattern="DM_GC" />
+    </Match>
+</FindBugsFilter>

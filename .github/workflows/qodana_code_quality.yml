@@ -1,0 +1,35 @@
+#-------------------------------------------------------------------------------#
+#            Discover all capabilities of Qodana in our documentation           #
+#             https://www.jetbrains.com/help/qodana/about-qodana.html           #
+#-------------------------------------------------------------------------------#
+
+name: Qodana
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  qodana:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.0
+      - name: 'Qodana Scan'
+        uses: JetBrains/qodana-action@v2026.1
+        env:
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+        with:
+          pr-mode: false
+          use-caches: true
+          post-pr-comment: false
+          use-annotations: false
+          upload-result: false
+          push-fixes: 'none'
+

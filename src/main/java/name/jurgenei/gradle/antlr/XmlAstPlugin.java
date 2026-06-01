@@ -13,6 +13,7 @@ import org.gradle.api.tasks.SourceSetContainer;
  * and also configures all XmlAst task types to depend on {@code classes}, ensuring
  * converter classes are available before conversion starts.</p>
  */
+@SuppressWarnings("unused")
 public class XmlAstPlugin implements Plugin<Project> {
 
     /**

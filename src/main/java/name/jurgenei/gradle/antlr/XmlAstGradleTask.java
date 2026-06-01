@@ -25,7 +25,6 @@ import org.gradle.work.DisableCachingByDefault;
 
 import javax.inject.Inject;
 import java.io.File;
-import java.io.PrintStream;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.FileSystems;
@@ -447,7 +446,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         final String previousGcHeapThresholdPercent = System.getProperty("xmlast.gc.heap.threshold.percent");
         if (aggressiveGc.get()) {
             final int gcFrequency = Math.max(1, gcEveryFiles.get());
-            final int heapThreshold = Math.max(1, Math.min(100, gcHeapThresholdPercent.get()));
+            final int heapThreshold = Math.clamp(gcHeapThresholdPercent.get(), 1, 100);
             System.setProperty("xmlast.gc.enabled", "true");
             System.setProperty("xmlast.gc.every.files", Integer.toString(gcFrequency));
             System.setProperty("xmlast.gc.heap.threshold.percent", Integer.toString(heapThreshold));
@@ -477,7 +476,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             if (conversionStats != null) {
                 fallbackFilesWithErrors = Math.max(0, conversionStats.filesWithErrors());
             }
-            conversionStats = handleConversionException(ex, failures, jobs, runStartNanos);
+            conversionStats = handleConversionException(ex, failures);
             if (conversionStats == null && fallbackFilesWithErrors == 0) {
                 fallbackFilesWithErrors = findParseFailureMessages(ex).size();
             }
@@ -521,11 +520,8 @@ public abstract class XmlAstGradleTask extends DefaultTask {
      */
     private DynamicAntlrXmlAstConverter.ConversionStats handleConversionException(
             final Exception ex,
-            final List<String> failures,
-            final List<File> jobs,
-            final long runStartNanos) {
-        final DynamicAntlrXmlAstConverter.ConversionStats extractedStats = findConversionStats(ex);
-        DynamicAntlrXmlAstConverter.ConversionStats result = extractedStats;
+            final List<String> failures) {
+        final DynamicAntlrXmlAstConverter.ConversionStats stats = findConversionStats(ex);
 
         final List<String> parseMessages = findParseFailureMessages(ex);
         final String message;
@@ -550,15 +546,15 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             getLogger().warn(message, ex);
         }
         
-        return result;
+        return stats;
     }
 
     /**
      * Validates the file extension configuration and returns the value.
      */
     private String validateAndGetExtension() {
-        String extension = targetExtension.get();
-        if (extension == null || extension.isBlank()) {
+        final String extension = targetExtension.get();
+        if (extension.isBlank()) {
             throw new GradleException("targetExtension is not configured");
         }
         return extension;
@@ -579,8 +575,8 @@ public abstract class XmlAstGradleTask extends DefaultTask {
      * Validates the execution model configuration and returns the value.
      */
     private String validateAndGetExecutionModel() {
-        String executionModelValue = executionModel.get();
-        if (executionModelValue != null && !executionModelValue.isBlank()) {
+        final String executionModelValue = executionModel.get();
+        if (!executionModelValue.isBlank()) {
             final String upperModel = executionModelValue.trim().toUpperCase();
             if (!upperModel.equals(GrammarConstants.EXECUTION_MODEL_SEQUENTIAL)
                     && !upperModel.equals(GrammarConstants.EXECUTION_MODEL_PLATFORM_THREADS)
@@ -850,17 +846,6 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         return messages;
     }
 
-    private String firstNonBlankMessage(final Throwable throwable) {
-        Throwable current = throwable;
-        while (current != null) {
-            final String message = current.getMessage();
-            if (message != null && !message.isBlank()) {
-                return message;
-            }
-            current = current.getCause();
-        }
-        return null;
-    }
 
     private String mostRelevantMessage(final Throwable throwable) {
         String fallback = null;

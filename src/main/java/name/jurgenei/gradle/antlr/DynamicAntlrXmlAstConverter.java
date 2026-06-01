@@ -35,7 +35,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
@@ -187,7 +186,7 @@ public final class DynamicAntlrXmlAstConverter {
                 final ExecutionModel executionModel = parseExecutionModel(executionModelName);
                 final int workerLimit = executionModel == ExecutionModel.SEQUENTIAL
                         ? 1
-                        : Math.max(1, configuredParallelism);
+                        : configuredParallelism;
                 final List<ConversionOutcome> outcomes = executeJobs(
                         jobs,
                         binding,
@@ -287,15 +286,12 @@ public final class DynamicAntlrXmlAstConverter {
         final List<Future<ConversionOutcome>> submitted = new ArrayList<>();
         try {
             for (ConversionJob job : jobs) {
-                submitted.add(completion.submit(new Callable<>() {
-                    @Override
-                    public ConversionOutcome call() throws Exception {
-                        permits.acquire();
-                        try {
-                            return processSingleFile(job, binding, startRule, compression, outcomeLogger);
-                        } finally {
-                            permits.release();
-                        }
+                submitted.add(completion.submit(() -> {
+                    permits.acquire();
+                    try {
+                        return processSingleFile(job, binding, startRule, compression, outcomeLogger);
+                    } finally {
+                        permits.release();
                     }
                 }));
             }
@@ -422,7 +418,6 @@ public final class DynamicAntlrXmlAstConverter {
         }
 
         final Runtime runtime = Runtime.getRuntime();
-        final long maxBefore = runtime.maxMemory();
         final long usedBefore = runtime.totalMemory() - runtime.freeMemory();
 
         System.gc();
@@ -562,7 +557,7 @@ public final class DynamicAntlrXmlAstConverter {
 
     private String describeThrowable(final Throwable throwable) {
         final String message = firstNonBlankMessage(throwable);
-        if (message == null || message.isBlank()) {
+        if (message.isBlank()) {
             return throwable.getClass().getName();
         }
         return throwable.getClass().getName() + ": " + message;
@@ -769,7 +764,7 @@ public final class DynamicAntlrXmlAstConverter {
     }
 
     private String resolveGeneratedFqcn(final Path generatedDir, final String simpleClassName) throws IOException {
-        Path source = null;
+        final Path source;
         try (Stream<Path> stream = Files.walk(generatedDir)) {
             source = stream
                     .filter(path -> path.getFileName().toString().equals(simpleClassName + ".java"))
@@ -786,7 +781,6 @@ public final class DynamicAntlrXmlAstConverter {
             for (String line : (Iterable<String>) lines::iterator) {
                 final String trimmed = line.trim();
                 if (GrammarConstants.PACKAGE_DECLARATION_PATTERN.matcher(trimmed).find()) {
-                    final Matcher matcher = GrammarConstants.PACKAGE_DECLARATION_PATTERN.matcher(trimmed);
                     packageName = trimmed.substring("package ".length(), trimmed.length() - 1).trim();
                     break;
                 }
@@ -893,16 +887,6 @@ public final class DynamicAntlrXmlAstConverter {
         return xmlBuilder.getXml();
     }
 
-
-    private String escapeXmlText(final String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.replace("&", "&amp;")
-                   .replace("<", "&lt;")
-                   .replace(">", "&gt;");
-    }
-
     private void appendTreeStreaming(
             final XmlBuilder xmlBuilder,
             final ParseTree node,
@@ -969,7 +953,7 @@ public final class DynamicAntlrXmlAstConverter {
             chain.tailNode = current;
 
             final ParseTree child = current.getChild(0);
-            if (child instanceof RuleNode childRule) {
+            if (child instanceof RuleNode) {
                 current = child;
             } else {
                 break;

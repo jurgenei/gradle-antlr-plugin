@@ -218,8 +218,8 @@ public abstract class XmlAstTask extends DefaultTask {
     /**
      * Enables rule-chain compression for generated XML AST output.
      *
-     * <p>When enabled, single-child `<rule>` chains of length {@code >= 2} are flattened,
-     * the chain head receives a `pathId` attribute, and a `<pathIndex>` section is appended
+     * <p>When enabled, single-child {@code <rule>} chains of length {@code >= 2} are flattened,
+     * the chain head receives a {@code pathId} attribute, and a {@code <pathIndex>} section is appended
      * to the AST root with `id -> path` mappings.</p>
      *
      * @return compression flag property.

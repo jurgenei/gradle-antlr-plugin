@@ -446,10 +446,7 @@ public final class DynamicAntlrXmlAstConverter {
             final int memoryPressureThresholdPercent) {
         if (processedCount % cachePressureCheckInterval == 0) {
             clearSharedCaches(binding);
-            if (heapPressurePercent() >= memoryPressureThresholdPercent) {
-                // Hint GC only under sustained pressure to avoid unnecessary pauses.
-                System.gc();
-            }
+            // Avoid explicit GC; rely on JVM heuristics after cache cleanup.
         }
     }
 

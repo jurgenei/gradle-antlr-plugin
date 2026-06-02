@@ -42,6 +42,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
@@ -65,6 +66,8 @@ import java.util.stream.Stream;
  * as superclass types are available through the provided runtime classloader classpath.</p>
  */
 public final class DynamicAntlrXmlAstConverter {
+
+    private static final int MAX_RETAINED_FAILURE_MESSAGES = 256;
 
     /**
      * Converts a list of source files relative to a source root into XML AST output files.
@@ -225,27 +228,26 @@ public final class DynamicAntlrXmlAstConverter {
     private ConversionStats processOutcomes(
             final List<ConversionOutcome> outcomes,
             final long runStartNanos) {
-        final List<String> failures = new ArrayList<>();
-        final List<String> successes = new ArrayList<>();
+        final List<String> retainedFailures = new ArrayList<>();
         long cumulativeFileProcessingNanos = 0L;
+        int failureCount = 0;
 
         outcomes.sort(Comparator.comparingInt(ConversionOutcome::index));
         
         for (ConversionOutcome outcome : outcomes) {
             cumulativeFileProcessingNanos += outcome.durationNanos();
             if (outcome.success()) {
-                successes.add(outcome.successLine());
+                System.out.println(outcome.successLine());
             } else {
-                failures.add(outcome.failureMessage());
+                failureCount++;
+                if (retainedFailures.size() < MAX_RETAINED_FAILURE_MESSAGES) {
+                    retainedFailures.add(outcome.failureMessage());
+                }
             }
-        }
-
-        for (String success : successes) {
-            System.out.println(success);
         }
         
         // Print detailed parse errors inline
-        for (String failure : failures) {
+        for (String failure : retainedFailures) {
             if (failure.startsWith("Parse failed for")) {
                 final int colonIdx = failure.indexOf(": ");
                 if (colonIdx > 0) {
@@ -260,12 +262,17 @@ public final class DynamicAntlrXmlAstConverter {
 
         final ConversionStats stats = new ConversionStats(
                 outcomes.size(),
-                failures.size(),
+                failureCount,
                 System.nanoTime() - runStartNanos,
                 cumulativeFileProcessingNanos);
         
-        if (!failures.isEmpty()) {
-            throw new ConversionFailedException(String.join(" || ", failures), stats);
+        if (failureCount > 0) {
+            final int droppedFailureMessages = Math.max(0, failureCount - retainedFailures.size());
+            if (droppedFailureMessages > 0) {
+                retainedFailures.add("... " + droppedFailureMessages
+                        + " additional parse failure(s) omitted to cap in-memory aggregation");
+            }
+            throw new ConversionFailedException(String.join(" || ", retainedFailures), stats);
         }
         return stats;
     }
@@ -357,6 +364,7 @@ public final class DynamicAntlrXmlAstConverter {
             final String startRule,
             final boolean compression) {
         final long fileStartNanos = System.nanoTime();
+        setCurrentBinding(binding);
         try {
             final String xml = parseToXml(
                     job.sourceFile().toPath(),
@@ -376,6 +384,9 @@ public final class DynamicAntlrXmlAstConverter {
                     durationNanos);
         } catch (Exception ex) {
             return ConversionOutcome.failure(job.index(), firstNonBlankMessage(ex), System.nanoTime() - fileStartNanos);
+        } finally {
+            clearCurrentBinding();
+            binding.clearCurrentThreadCaches();
         }
     }
 
@@ -707,45 +718,111 @@ public final class DynamicAntlrXmlAstConverter {
         @SuppressWarnings("unchecked") final Class<? extends Parser> parserClass = (Class<? extends Parser>) parserRaw;
 
         final Constructor<? extends Lexer> lexerCtor = lexerClass.getConstructor(org.antlr.v4.runtime.CharStream.class);
-        final Lexer lexer = lexerCtor.newInstance(CharStreams.fromPath(sourceFile, StandardCharsets.UTF_8));
-
-        final CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-
         final Constructor<? extends Parser> parserCtor = parserClass.getConstructor(org.antlr.v4.runtime.TokenStream.class);
-        final Parser parser = parserCtor.newInstance(tokenStream);
 
-        // Cache instances in binding for DFA management (must be done via reflection for private access)
+        Lexer lexer = null;
+        CommonTokenStream tokenStream = null;
+        Parser parser = null;
+        ParseTree parseTree = null;
+        CollectingErrorListener errors = null;
         try {
-            // This will be called from binding context, so we need to stash for later clearing
+            lexer = lexerCtor.newInstance(CharStreams.fromPath(sourceFile, StandardCharsets.UTF_8));
+            tokenStream = new CommonTokenStream(lexer);
+            parser = parserCtor.newInstance(tokenStream);
+
+            // Bind instances for explicit cache cleanup after each file.
             cacheParserInstances(lexer, parser);
+
+            errors = new CollectingErrorListener();
+            lexer.removeErrorListeners();
+            parser.removeErrorListeners();
+            lexer.addErrorListener(errors);
+            parser.addErrorListener(errors);
+
+            final Method entryPoint = parserClass.getMethod(startRule);
+            final Object treeObj = entryPoint.invoke(parser);
+            if (!(treeObj instanceof ParseTree parsedTree)) {
+                throw new IllegalStateException("Start rule does not return a ParseTree: " + startRule);
+            }
+            parseTree = parsedTree;
+
+            if (errors.errorCount > 0) {
+                throw new GradleException("Parse failed for " + sourceFile + ": " + String.join(" | ", errors.messages));
+            }
+
+            final String xml = toXml(parser, parseTree, sourceFile.getFileName().toString(), startRule, compression);
+            final long lineCount = countLines(sourceFile);
+            final long byteCount = Files.size(sourceFile);
+            errors.successfulParse = true;
+            errors.lineCount = lineCount;
+            errors.byteCount = byteCount;
+            return xml;
+        } finally {
+            // Drop strong references quickly to improve old-gen reclamation during long runs.
+            parseTree = null;
+            if (errors != null) {
+                errors.messages.clear();
+            }
+            if (tokenStream != null) {
+                tokenStream.setTokenSource(null);
+            }
+            if (lexer != null) {
+                lexer.removeErrorListeners();
+            }
+            if (parser != null) {
+                parser.removeErrorListeners();
+            }
+            clearAntlrStaticCaches(lexerClass, parserClass, lexer, parser);
+        }
+    }
+
+    private void clearAntlrStaticCaches(
+            final Class<? extends Lexer> lexerClass,
+            final Class<? extends Parser> parserClass,
+            final Lexer lexer,
+            final Parser parser) {
+        try {
+            if (lexer != null && lexer.getInterpreter() != null) {
+                lexer.getInterpreter().clearDFA();
+            }
         } catch (Exception ignored) {
-            // Caching is best-effort; proceed without it
+            // Best effort cache cleanup.
         }
-
-        final CollectingErrorListener errors = new CollectingErrorListener();
-        lexer.removeErrorListeners();
-        parser.removeErrorListeners();
-        lexer.addErrorListener(errors);
-        parser.addErrorListener(errors);
-
-        final Method entryPoint = parserClass.getMethod(startRule);
-        final Object treeObj = entryPoint.invoke(parser);
-        if (!(treeObj instanceof ParseTree parseTree)) {
-            throw new IllegalStateException("Start rule does not return a ParseTree: " + startRule);
+        try {
+            if (parser != null && parser.getInterpreter() != null) {
+                parser.getInterpreter().clearDFA();
+            }
+        } catch (Exception ignored) {
+            // Best effort cache cleanup.
         }
+        clearSharedPredictionContextCache(lexerClass);
+        clearSharedPredictionContextCache(parserClass);
+    }
 
-        if (errors.errorCount > 0) {
-            throw new GradleException("Parse failed for " + sourceFile + ": " + String.join(" | ", errors.messages));
+    private void clearSharedPredictionContextCache(final Class<?> antlrType) {
+        try {
+            final var sharedCacheField = antlrType.getDeclaredField("_sharedContextCache");
+            sharedCacheField.setAccessible(true);
+            final Object sharedCache = sharedCacheField.get(null);
+            if (sharedCache == null) {
+                return;
+            }
+            try {
+                final Method clearMethod = sharedCache.getClass().getMethod("clear");
+                clearMethod.invoke(sharedCache);
+                return;
+            } catch (NoSuchMethodException ignored) {
+                // Fall through to reflective map clear for ANTLR versions without a public clear().
+            }
+            final var cacheField = sharedCache.getClass().getDeclaredField("cache");
+            cacheField.setAccessible(true);
+            final Object cache = cacheField.get(sharedCache);
+            if (cache instanceof Map<?, ?> map) {
+                map.clear();
+            }
+        } catch (Exception ignored) {
+            // Best effort cache cleanup.
         }
-
-        final String xml = toXml(parser, parseTree, sourceFile.getFileName().toString(), startRule, compression);
-        final long lineCount = countLines(sourceFile);
-        final long byteCount = Files.size(sourceFile);
-        errors.successfulParse = true;
-        errors.lineCount = lineCount;
-        errors.byteCount = byteCount;
-
-        return xml;
     }
 
     private final ThreadLocal<RuntimeParserBinding> currentBinding = new ThreadLocal<>();
@@ -946,8 +1023,8 @@ public final class DynamicAntlrXmlAstConverter {
         private final String lexerClassName;
         private final String parserClassName;
         private final Path workspace;
-        private volatile Lexer cachedLexer;
-        private volatile Parser cachedParser;
+        private final ThreadLocal<Lexer> cachedLexerByThread = new ThreadLocal<>();
+        private final ThreadLocal<Parser> cachedParserByThread = new ThreadLocal<>();
 
         private RuntimeParserBinding(
                 final ClassLoader classLoader,
@@ -973,27 +1050,32 @@ public final class DynamicAntlrXmlAstConverter {
         }
 
         private void setCachedInstances(final Lexer lexer, final Parser parser) {
-            this.cachedLexer = lexer;
-            this.cachedParser = parser;
+            this.cachedLexerByThread.set(lexer);
+            this.cachedParserByThread.set(parser);
         }
 
-        private void clearDFACaches() {
+        private void clearCurrentThreadCaches() {
             try {
+                final Lexer cachedLexer = cachedLexerByThread.get();
                 if (cachedLexer != null) {
                     cachedLexer.getInterpreter().clearDFA();
                 }
+                final Parser cachedParser = cachedParserByThread.get();
                 if (cachedParser != null) {
                     cachedParser.getInterpreter().clearDFA();
                 }
             } catch (Exception ignored) {
                 // Best effort DFA clearing
+            } finally {
+                cachedLexerByThread.remove();
+                cachedParserByThread.remove();
             }
         }
 
         @Override
         public void close() {
             // Clear DFA on binding close
-            clearDFACaches();
+            clearCurrentThreadCaches();
             if (classLoaderField instanceof URLClassLoader closable) {
                 try {
                     closable.close();

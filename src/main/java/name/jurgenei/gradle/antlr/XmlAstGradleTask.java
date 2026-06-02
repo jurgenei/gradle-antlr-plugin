@@ -70,6 +70,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     private final Property<String> startRule;
     private final Property<Boolean> compression;
     private final Property<Boolean> enableDFAMonitoring;
+    private final Property<Integer> maxInFlightJobs;
+    private final Property<Integer> cachePressureCheckInterval;
+    private final Property<Integer> memoryPressureThresholdPercent;
     private final ConfigurableFileCollection runtimeClasspath;
 
     /**
@@ -100,6 +103,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         startRule = objects.property(String.class).convention(GrammarConstants.DEFAULT_START_RULE);
         compression = objects.property(Boolean.class).convention(false);
         enableDFAMonitoring = objects.property(Boolean.class).convention(false);
+        maxInFlightJobs = objects.property(Integer.class).convention(GrammarConstants.DEFAULT_MAX_IN_FLIGHT_JOBS);
+        cachePressureCheckInterval = objects.property(Integer.class).convention(GrammarConstants.DEFAULT_CACHE_PRESSURE_CHECK_INTERVAL);
+        memoryPressureThresholdPercent = objects.property(Integer.class).convention(GrammarConstants.DEFAULT_MEMORY_PRESSURE_THRESHOLD_PERCENT);
         runtimeClasspath = objects.fileCollection();
 
         sourceDirectory.convention(getProject().getLayout().getProjectDirectory().dir("src/main/sql"));
@@ -331,6 +337,36 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     }
 
     /**
+     * Maximum queued in-flight jobs while running in parallel execution models.
+     *
+     * @return max in-flight job count.
+     */
+    @Input
+    public Property<Integer> getMaxInFlightJobs() {
+        return maxInFlightJobs;
+    }
+
+    /**
+     * Periodic interval (files processed) for additional cache-pressure checks.
+     *
+     * @return cache pressure check interval.
+     */
+    @Input
+    public Property<Integer> getCachePressureCheckInterval() {
+        return cachePressureCheckInterval;
+    }
+
+    /**
+     * Heap usage percentage threshold that triggers memory-pressure mitigation.
+     *
+     * @return memory pressure threshold percent.
+     */
+    @Input
+    public Property<Integer> getMemoryPressureThresholdPercent() {
+        return memoryPressureThresholdPercent;
+    }
+
+    /**
      * Runtime classpath used to load converter classes and dependencies.
      *
      * @return classpath file collection.
@@ -366,6 +402,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         final String extension = validateAndGetExtension();
         final int parallelismValue = validateAndGetParallelism();
         final String executionModelValue = validateAndGetExecutionModel();
+        final int maxInFlightJobsValue = validateAndGetMaxInFlightJobs();
+        final int cachePressureCheckIntervalValue = validateAndGetCachePressureCheckInterval();
+        final int memoryPressureThresholdPercentValue = validateAndGetMemoryPressureThresholdPercent();
 
         // Select and filter files for processing
         final List<File> selectedFiles = selectSourceFiles(sourceDir.toPath(), includes.get(), excludes.get());
@@ -379,7 +418,8 @@ public abstract class XmlAstGradleTask extends DefaultTask {
 
         // Execute conversion and handle results
         performConversion(sourceDir, destinationDir, resolvedConfig, extension, parallelismValue, 
-                         executionModelValue, jobs, runStartNanos);
+                         executionModelValue, maxInFlightJobsValue, cachePressureCheckIntervalValue,
+                         memoryPressureThresholdPercentValue, jobs, runStartNanos);
     }
 
     /**
@@ -393,6 +433,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             final String extension,
             final int parallelismValue,
             final String executionModelValue,
+            final int maxInFlightJobsValue,
+            final int cachePressureCheckIntervalValue,
+            final int memoryPressureThresholdPercentValue,
             final List<File> jobs,
             final long runStartNanos) {
         final List<String> failures = new ArrayList<>();
@@ -417,7 +460,10 @@ public abstract class XmlAstGradleTask extends DefaultTask {
                     compression.get(),
                     continueOnError.get(),
                     executionModelValue,
-                    parallelismValue);
+                    parallelismValue,
+                    maxInFlightJobsValue,
+                    cachePressureCheckIntervalValue,
+                    memoryPressureThresholdPercentValue);
         } catch (Exception ex) {
             conversionStats = handleConversionException(ex, failures, jobs, runStartNanos);
             fallbackFilesWithErrors = conversionStats == null ? findParseFailureMessages(ex).size() : 0;
@@ -509,6 +555,39 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             }
         }
         return executionModelValue;
+    }
+
+    /**
+     * Validates the maxInFlightJobs configuration and returns the value.
+     */
+    private int validateAndGetMaxInFlightJobs() {
+        final int value = maxInFlightJobs.get();
+        if (value < 1) {
+            throw new GradleException("maxInFlightJobs must be >= 1, got: " + value);
+        }
+        return value;
+    }
+
+    /**
+     * Validates cachePressureCheckInterval and returns the value.
+     */
+    private int validateAndGetCachePressureCheckInterval() {
+        final int value = cachePressureCheckInterval.get();
+        if (value < 1) {
+            throw new GradleException("cachePressureCheckInterval must be >= 1, got: " + value);
+        }
+        return value;
+    }
+
+    /**
+     * Validates memoryPressureThresholdPercent and returns the value.
+     */
+    private int validateAndGetMemoryPressureThresholdPercent() {
+        final int value = memoryPressureThresholdPercent.get();
+        if (value < 50 || value > 98) {
+            throw new GradleException("memoryPressureThresholdPercent must be between 50 and 98, got: " + value);
+        }
+        return value;
     }
 
     private void logHeapMemory(final String label) {

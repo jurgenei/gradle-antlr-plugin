@@ -101,6 +101,21 @@ tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
 }
 ```
 
+### 3b) Recommended memory settings for very large batches
+
+For large runs (for example, tens of thousands of files), tune the new memory-pressure controls:
+
+```groovy
+tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+    // Keep queue depth bounded to avoid excessive in-memory backlog.
+    maxInFlightJobs.set(16)
+    // Run cache-pressure cleanup more frequently during long runs.
+    cachePressureCheckInterval.set(32)
+    // Start pressure mitigation before heap usage gets too close to max.
+    memoryPressureThresholdPercent.set(80)
+}
+```
+
 ### 4) Force a clean re-parse when needed
 
 ```groovy

@@ -29,6 +29,15 @@ public final class GrammarConstants {
     /** Default parallelism level */
     public static final int DEFAULT_PARALLELISM = 1;
 
+    /** Max number of queued in-flight conversion jobs in parallel mode */
+    public static final int DEFAULT_MAX_IN_FLIGHT_JOBS = 32;
+
+    /** Periodic interval for additional cache-pressure checks/cleanup */
+    public static final int DEFAULT_CACHE_PRESSURE_CHECK_INTERVAL = 64;
+
+    /** Heap usage percentage threshold that triggers memory-pressure mitigation */
+    public static final int DEFAULT_MEMORY_PRESSURE_THRESHOLD_PERCENT = 85;
+
     /** Default output file extension */
     public static final String DEFAULT_FILE_EXTENSION = ".xml";
 

@@ -72,6 +72,11 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     private final Property<Boolean> enableDFAMonitoring;
     private final ConfigurableFileCollection runtimeClasspath;
 
+    /**
+     * Creates the Gradle task and applies default conventions.
+     *
+     * @param objects Gradle object factory.
+     */
     @Inject
     public XmlAstGradleTask(final ObjectFactory objects) {
         this.projectDirPath = getProject().getProjectDir().getAbsolutePath();

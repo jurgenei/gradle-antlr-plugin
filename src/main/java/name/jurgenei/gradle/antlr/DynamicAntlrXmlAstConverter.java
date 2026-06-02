@@ -70,6 +70,12 @@ public final class DynamicAntlrXmlAstConverter {
     private static final int MAX_RETAINED_FAILURE_MESSAGES = 256;
 
     /**
+     * Creates a converter instance.
+     */
+    public DynamicAntlrXmlAstConverter() {
+    }
+
+    /**
      * Converts a list of source files relative to a source root into XML AST output files.
      *
      * @param sourceRoot root directory used to preserve relative output paths.
@@ -142,6 +148,23 @@ public final class DynamicAntlrXmlAstConverter {
                 GrammarConstants.DEFAULT_PARALLELISM);
     }
 
+    /**
+     * Converts source files and returns aggregated execution statistics.
+     *
+     * @param sourceRoot root directory used to preserve relative output paths.
+     * @param sourceFiles files to process.
+     * @param destinationRoot output root directory.
+     * @param targetExtension output extension appended to mapped source filenames.
+     * @param classLoader classloader containing parser/lexer/runtime dependencies.
+     * @param lexerClassName lexer class name or grammar coordinate.
+     * @param parserClassName parser class name or grammar coordinate.
+     * @param startRule parser entry rule.
+     * @param compression enables AST compression.
+     * @param continueOnError when true, processes remaining files after failures.
+     * @param executionModelName worker model (sequential/platform/virtual threads).
+     * @param configuredParallelism worker count when non-sequential model is used.
+     * @return aggregated conversion statistics.
+     */
     public ConversionStats convertFileTreeWithStats(
             final File sourceRoot,
             final List<File> sourceFiles,
@@ -406,15 +429,24 @@ public final class DynamicAntlrXmlAstConverter {
         };
     }
 
+    /**
+     * Supported worker execution strategies for file conversion.
+     */
     private enum ExecutionModel {
         SEQUENTIAL,
         PLATFORM_THREADS,
         VIRTUAL_THREADS
     }
 
+    /**
+     * Immutable mapping of one source input to one target output path.
+     */
     private record ConversionJob(int index, File sourceFile, Path relativePath, Path output) {
     }
 
+    /**
+     * Per-file conversion result used for ordered reporting and summary statistics.
+     */
     private record ConversionOutcome(
             int index,
             boolean success,
@@ -430,6 +462,14 @@ public final class DynamicAntlrXmlAstConverter {
         }
     }
 
+    /**
+     * Aggregated conversion metrics for one converter invocation.
+     *
+     * @param processedFiles number of processed inputs.
+     * @param filesWithErrors number of inputs that failed parsing/conversion.
+     * @param totalDurationNanos wall-clock duration for the invocation.
+     * @param cumulativeFileProcessingNanos sum of all per-file durations.
+     */
     public record ConversionStats(
             int processedFiles,
             int filesWithErrors,
@@ -437,14 +477,31 @@ public final class DynamicAntlrXmlAstConverter {
             long cumulativeFileProcessingNanos) {
     }
 
+    /**
+     * Signals one or more conversion failures while preserving collected statistics.
+     */
     public static final class ConversionFailedException extends GradleException {
+        /**
+         * Aggregated stats captured at failure time.
+         */
         private final ConversionStats stats;
 
+        /**
+         * Creates a conversion failure with captured metrics.
+         *
+         * @param message failure summary.
+         * @param stats aggregated conversion metrics.
+         */
         public ConversionFailedException(final String message, final ConversionStats stats) {
             super(message);
             this.stats = stats;
         }
 
+        /**
+        * Returns conversion metrics collected before failure propagation.
+        *
+        * @return conversion metrics.
+        */
         public ConversionStats getStats() {
             return stats;
         }
@@ -1018,6 +1075,9 @@ public final class DynamicAntlrXmlAstConverter {
         return Integer.toString(token.getType());
     }
 
+    /**
+     * Holds runtime parser/lexer loading metadata and provides best-effort cache cleanup hooks.
+     */
     private static final class RuntimeParserBinding implements AutoCloseable {
         private final ClassLoader classLoaderField;
         private final String lexerClassName;
@@ -1104,6 +1164,9 @@ public final class DynamicAntlrXmlAstConverter {
         }
     }
 
+    /**
+     * Collects lexer/parser syntax diagnostics for one file conversion.
+     */
     private static final class CollectingErrorListener extends BaseErrorListener {
         private int errorCount;
         private final List<String> messages = new ArrayList<>();

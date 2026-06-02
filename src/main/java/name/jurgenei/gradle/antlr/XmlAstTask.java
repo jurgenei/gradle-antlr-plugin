@@ -61,6 +61,11 @@ public abstract class XmlAstTask extends DefaultTask {
     private final Property<Boolean> compression;
     private final ConfigurableFileCollection runtimeClasspath;
 
+    /**
+     * Creates a legacy xmlast task with default conventions.
+     *
+     * @param objects Gradle object factory.
+     */
     @Inject
     public XmlAstTask(final ObjectFactory objects) {
         sourceTrees = objects.fileCollection();

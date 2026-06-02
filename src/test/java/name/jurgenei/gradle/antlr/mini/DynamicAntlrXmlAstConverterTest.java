@@ -249,6 +249,74 @@ public class DynamicAntlrXmlAstConverterTest {
         Assert.assertTrue(ex.getMessage().contains("configuredParallelism must be >= 1"));
     }
 
+    @Test
+    public void rejectsInvalidMemoryThresholdInStatsCall() throws Exception {
+        final File outputDir = temporaryFolder.newFolder("xml-ast-invalid-memory-threshold");
+        final List<File> inputs = List.of(VALID_DIR.resolve("01_select_star.sql").toFile());
+
+        final IllegalArgumentException ex = Assert.assertThrows(
+                IllegalArgumentException.class,
+                () -> new DynamicAntlrXmlAstConverter().convertFileTreeWithStats(
+                        VALID_DIR.toFile(),
+                        inputs,
+                        outputDir,
+                        ".xml",
+                        MiniLexer.class.getClassLoader(),
+                        MiniLexer.class.getName(),
+                        MiniParser.class.getName(),
+                        "script",
+                        false,
+                        false,
+                        "SEQUENTIAL",
+                        1,
+                        8,
+                        16,
+                        49));
+
+        Assert.assertTrue(ex.getMessage().contains("memoryPressureThresholdPercent"));
+    }
+
+    @Test
+    public void convertsLargeBatchWithBoundedParallelWindow() throws Exception {
+        final Path sourceDir = temporaryFolder.newFolder("xml-ast-batch-src").toPath();
+        final File outputDir = temporaryFolder.newFolder("xml-ast-batch-out");
+        final String content = Files.readString(VALID_DIR.resolve("01_select_star.sql"), StandardCharsets.UTF_8);
+        final int fileCount = 200;
+
+        for (int i = 0; i < fileCount; i++) {
+            final String name = String.format("batch_%03d.sql", i);
+            Files.writeString(sourceDir.resolve(name), content, StandardCharsets.UTF_8);
+        }
+
+        final List<File> inputs;
+        try (Stream<Path> stream = Files.list(sourceDir)) {
+            inputs = stream.sorted().map(Path::toFile).toList();
+        }
+
+        final DynamicAntlrXmlAstConverter.ConversionStats stats = new DynamicAntlrXmlAstConverter().convertFileTreeWithStats(
+                sourceDir.toFile(),
+                inputs,
+                outputDir,
+                ".xml",
+                MiniLexer.class.getClassLoader(),
+                MiniLexer.class.getName(),
+                MiniParser.class.getName(),
+                "script",
+                true,
+                false,
+                "VIRTUAL_THREADS",
+                8,
+                16,
+                25,
+                85);
+
+        Assert.assertEquals(fileCount, stats.processedFiles());
+        Assert.assertEquals(0, stats.filesWithErrors());
+        try (Stream<Path> stream = Files.list(outputDir.toPath())) {
+            Assert.assertEquals(fileCount, stream.filter(path -> path.getFileName().toString().endsWith(".xml")).count());
+        }
+    }
+
     private static List<Path> listSqlFiles(final Path directory) throws Exception {
         try (Stream<Path> stream = Files.list(directory)) {
             return stream

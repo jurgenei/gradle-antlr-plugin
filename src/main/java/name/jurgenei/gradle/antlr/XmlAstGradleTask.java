@@ -70,11 +70,16 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     private final Property<String> startRule;
     private final Property<Boolean> compression;
     private final Property<Boolean> enableDFAMonitoring;
-    private final Property<Boolean> aggressiveGc;
-    private final Property<Integer> gcEveryFiles;
-    private final Property<Integer> gcHeapThresholdPercent;
+    private final Property<Integer> maxInFlightJobs;
+    private final Property<Integer> cachePressureCheckInterval;
+    private final Property<Integer> memoryPressureThresholdPercent;
     private final ConfigurableFileCollection runtimeClasspath;
 
+    /**
+     * Creates the Gradle task and applies default conventions.
+     *
+     * @param objects Gradle object factory.
+     */
     @Inject
     public XmlAstGradleTask(final ObjectFactory objects) {
         this.projectDirPath = getProject().getProjectDir().getAbsolutePath();
@@ -98,9 +103,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         startRule = objects.property(String.class).convention(GrammarConstants.DEFAULT_START_RULE);
         compression = objects.property(Boolean.class).convention(false);
         enableDFAMonitoring = objects.property(Boolean.class).convention(false);
-        aggressiveGc = objects.property(Boolean.class).convention(false);
-        gcEveryFiles = objects.property(Integer.class).convention(25);
-        gcHeapThresholdPercent = objects.property(Integer.class).convention(80);
+        maxInFlightJobs = objects.property(Integer.class).convention(GrammarConstants.DEFAULT_MAX_IN_FLIGHT_JOBS);
+        cachePressureCheckInterval = objects.property(Integer.class).convention(GrammarConstants.DEFAULT_CACHE_PRESSURE_CHECK_INTERVAL);
+        memoryPressureThresholdPercent = objects.property(Integer.class).convention(GrammarConstants.DEFAULT_MEMORY_PRESSURE_THRESHOLD_PERCENT);
         runtimeClasspath = objects.fileCollection();
 
         sourceDirectory.convention(getProject().getLayout().getProjectDirectory().dir("src/main/sql"));
@@ -332,39 +337,33 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     }
 
     /**
-     * Enables periodic forced GC during long parsing runs.
+     * Maximum queued in-flight jobs while running in parallel execution models.
      *
-     * <p>This is a pragmatic safety valve for extremely large conversion batches where
-     * parser memory pressure can exceed heap even in sequential mode.</p>
-     *
-     * @return aggressive-GC flag property.
+     * @return max in-flight job count.
      */
     @Input
-    public Property<Boolean> getAggressiveGc() {
-        return aggressiveGc;
+    public Property<Integer> getMaxInFlightJobs() {
+        return maxInFlightJobs;
     }
 
     /**
-     * Number of completed files between forced GC cycles when aggressive GC is enabled.
+     * Periodic interval (files processed) for additional cache-pressure checks.
      *
-     * @return files-per-gc property.
+     * @return cache pressure check interval.
      */
     @Input
-    public Property<Integer> getGcEveryFiles() {
-        return gcEveryFiles;
+    public Property<Integer> getCachePressureCheckInterval() {
+        return cachePressureCheckInterval;
     }
 
     /**
-     * Heap-used percent threshold for aggressive GC trigger.
+     * Heap usage percentage threshold that triggers memory-pressure mitigation.
      *
-     * <p>When aggressive GC is enabled, forced GC runs only when heap usage is at or above
-     * this percentage at the configured file interval.</p>
-     *
-     * @return heap threshold percent property.
+     * @return memory pressure threshold percent.
      */
     @Input
-    public Property<Integer> getGcHeapThresholdPercent() {
-        return gcHeapThresholdPercent;
+    public Property<Integer> getMemoryPressureThresholdPercent() {
+        return memoryPressureThresholdPercent;
     }
 
     /**
@@ -403,6 +402,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         final String extension = validateAndGetExtension();
         final int parallelismValue = validateAndGetParallelism();
         final String executionModelValue = validateAndGetExecutionModel();
+        final int maxInFlightJobsValue = validateAndGetMaxInFlightJobs();
+        final int cachePressureCheckIntervalValue = validateAndGetCachePressureCheckInterval();
+        final int memoryPressureThresholdPercentValue = validateAndGetMemoryPressureThresholdPercent();
 
         // Select and filter files for processing
         final List<File> selectedFiles = selectSourceFiles(sourceDir.toPath(), includes.get(), excludes.get());
@@ -416,7 +418,8 @@ public abstract class XmlAstGradleTask extends DefaultTask {
 
         // Execute conversion and handle results
         performConversion(sourceDir, destinationDir, resolvedConfig, extension, parallelismValue, 
-                         executionModelValue, jobs, runStartNanos);
+                         executionModelValue, maxInFlightJobsValue, cachePressureCheckIntervalValue,
+                         memoryPressureThresholdPercentValue, jobs, runStartNanos);
     }
 
     /**
@@ -430,6 +433,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             final String extension,
             final int parallelismValue,
             final String executionModelValue,
+            final int maxInFlightJobsValue,
+            final int cachePressureCheckIntervalValue,
+            final int memoryPressureThresholdPercentValue,
             final List<File> jobs,
             final long runStartNanos) {
         final List<String> failures = new ArrayList<>();
@@ -441,35 +447,23 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             logHeapMemory("Initial state");
         }
 
-        final String previousGcEnabled = System.getProperty("xmlast.gc.enabled");
-        final String previousGcEveryFiles = System.getProperty("xmlast.gc.every.files");
-        final String previousGcHeapThresholdPercent = System.getProperty("xmlast.gc.heap.threshold.percent");
-        if (aggressiveGc.get()) {
-            final int gcFrequency = Math.max(1, gcEveryFiles.get());
-            final int heapThreshold = Math.clamp(gcHeapThresholdPercent.get(), 1, 100);
-            System.setProperty("xmlast.gc.enabled", "true");
-            System.setProperty("xmlast.gc.every.files", Integer.toString(gcFrequency));
-            System.setProperty("xmlast.gc.heap.threshold.percent", Integer.toString(heapThreshold));
-            getLogger().lifecycle("xmlast aggressive GC enabled (every {} file(s), heap >= {}%)", gcFrequency, heapThreshold);
-        }
-
-        try {
-            try (URLClassLoader classLoader = createRuntimeClassLoader()) {
-                conversionStats = new DynamicAntlrXmlAstConverter().convertFileTreeWithStats(
-                        sourceDir,
-                        jobs,
-                        destinationDir,
-                        extension,
-                        classLoader,
-                        resolvedConfig.lexerClassName(),
-                        resolvedConfig.parserClassName(),
-                        resolvedConfig.startRule(),
-                        compression.get(),
-                        continueOnError.get(),
-                        executionModelValue,
-                        parallelismValue,
-                        line -> getLogger().lifecycle(line));
-            }
+        try (URLClassLoader classLoader = createRuntimeClassLoader()) {
+            conversionStats = new DynamicAntlrXmlAstConverter().convertFileTreeWithStats(
+                    sourceDir,
+                    jobs,
+                    destinationDir,
+                    extension,
+                    classLoader,
+                    resolvedConfig.lexerClassName(),
+                    resolvedConfig.parserClassName(),
+                    resolvedConfig.startRule(),
+                    compression.get(),
+                    continueOnError.get(),
+                    executionModelValue,
+                    parallelismValue,
+                    maxInFlightJobsValue,
+                    cachePressureCheckIntervalValue,
+                    memoryPressureThresholdPercentValue);
         } catch (Exception ex) {
             // Preserve converter stats for summary even when fail-fast rethrows.
             conversionStats = findConversionStats(ex);
@@ -587,6 +581,39 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             }
         }
         return executionModelValue;
+    }
+
+    /**
+     * Validates the maxInFlightJobs configuration and returns the value.
+     */
+    private int validateAndGetMaxInFlightJobs() {
+        final int value = maxInFlightJobs.get();
+        if (value < 1) {
+            throw new GradleException("maxInFlightJobs must be >= 1, got: " + value);
+        }
+        return value;
+    }
+
+    /**
+     * Validates cachePressureCheckInterval and returns the value.
+     */
+    private int validateAndGetCachePressureCheckInterval() {
+        final int value = cachePressureCheckInterval.get();
+        if (value < 1) {
+            throw new GradleException("cachePressureCheckInterval must be >= 1, got: " + value);
+        }
+        return value;
+    }
+
+    /**
+     * Validates memoryPressureThresholdPercent and returns the value.
+     */
+    private int validateAndGetMemoryPressureThresholdPercent() {
+        final int value = memoryPressureThresholdPercent.get();
+        if (value < 50 || value > 98) {
+            throw new GradleException("memoryPressureThresholdPercent must be between 50 and 98, got: " + value);
+        }
+        return value;
     }
 
     private void logHeapMemory(final String label) {

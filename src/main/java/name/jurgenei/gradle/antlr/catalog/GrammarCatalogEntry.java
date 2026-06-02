@@ -37,6 +37,8 @@ public final class GrammarCatalogEntry {
     }
 
     /**
+     * Returns the catalog grammar name.
+     *
      * @return catalog grammar name.
      */
     public String getName() {
@@ -44,6 +46,8 @@ public final class GrammarCatalogEntry {
     }
 
     /**
+     * Returns the optional runtime grammar alias.
+     *
      * @return optional runtime grammar key.
      */
     public String getRuntimeGrammar() {
@@ -51,6 +55,8 @@ public final class GrammarCatalogEntry {
     }
 
     /**
+     * Returns the parser coordinate from the catalog entry.
+     *
      * @return parser coordinate value.
      */
     public String getParser() {
@@ -58,6 +64,8 @@ public final class GrammarCatalogEntry {
     }
 
     /**
+     * Returns the lexer coordinate from the catalog entry.
+     *
      * @return lexer coordinate value.
      */
     public String getLexer() {
@@ -65,6 +73,8 @@ public final class GrammarCatalogEntry {
     }
 
     /**
+     * Returns the parser start rule configured for this entry.
+     *
      * @return parser entry rule name.
      */
     public String getStartRule() {

@@ -17,6 +17,12 @@ import org.gradle.api.tasks.SourceSetContainer;
 public class XmlAstPlugin implements Plugin<Project> {
 
     /**
+     * Creates the plugin instance.
+     */
+    public XmlAstPlugin() {
+    }
+
+    /**
      * Applies task registrations and common task conventions for this plugin.
      *
      * @param project Gradle project receiving the plugin.

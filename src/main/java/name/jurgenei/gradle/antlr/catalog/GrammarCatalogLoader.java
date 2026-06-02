@@ -18,6 +18,12 @@ import java.util.Map;
 public final class GrammarCatalogLoader {
 
     /**
+     * Creates a catalog loader.
+     */
+    public GrammarCatalogLoader() {
+    }
+
+    /**
      * Loads and validates a grammar catalog file.
      *
      * @param file catalog XML file.

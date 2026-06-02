@@ -34,7 +34,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
@@ -64,6 +65,14 @@ public final class DynamicAntlrXmlAstConverter {
     private static final String GC_HEAP_THRESHOLD_PERCENT_PROPERTY = "xmlast.gc.heap.threshold.percent";
 
     private final AtomicInteger completedFilesCounter = new AtomicInteger();
+
+    private static final int MAX_RETAINED_FAILURE_MESSAGES = 256;
+
+    /**
+     * Creates a converter instance.
+     */
+    public DynamicAntlrXmlAstConverter() {
+    }
 
     /**
      * Converts a list of source files relative to a source root into XML AST output files.
@@ -137,11 +146,62 @@ public final class DynamicAntlrXmlAstConverter {
                 continueOnError,
                 GrammarConstants.EXECUTION_MODEL_SEQUENTIAL,
                 GrammarConstants.DEFAULT_PARALLELISM,
-                outcomeLogger
-                );
+                GrammarConstants.DEFAULT_MAX_IN_FLIGHT_JOBS,
+                GrammarConstants.DEFAULT_CACHE_PRESSURE_CHECK_INTERVAL,
+                GrammarConstants.DEFAULT_MEMORY_PRESSURE_THRESHOLD_PERCENT);
     }
 
+    /**
+     * Converts source files and returns aggregated execution statistics.
+     *
+     * @param sourceRoot root directory used to preserve relative output paths.
+     * @param sourceFiles files to process.
+     * @param destinationRoot output root directory.
+     * @param targetExtension output extension appended to mapped source filenames.
+     * @param classLoader classloader containing parser/lexer/runtime dependencies.
+     * @param lexerClassName lexer class name or grammar coordinate.
+     * @param parserClassName parser class name or grammar coordinate.
+     * @param startRule parser entry rule.
+     * @param compression enables AST compression.
+     * @param continueOnError when true, processes remaining files after failures.
+     * @param executionModelName worker model (sequential/platform/virtual threads).
+     * @param configuredParallelism worker count when non-sequential model is used.
+     * @return aggregated conversion statistics.
+     */
+    public ConversionStats convertFileTreeWithStats(
+            final File sourceRoot,
+            final List<File> sourceFiles,
+            final File destinationRoot,
+            final String targetExtension,
+            final ClassLoader classLoader,
+            final String lexerClassName,
+            final String parserClassName,
+            final String startRule,
+            final boolean compression,
+            final boolean continueOnError,
+            final String executionModelName,
+            final int configuredParallelism) {
+        return convertFileTreeWithStats(
+                sourceRoot,
+                sourceFiles,
+                destinationRoot,
+                targetExtension,
+                classLoader,
+                lexerClassName,
+                parserClassName,
+                startRule,
+                compression,
+                continueOnError,
+                executionModelName,
+                configuredParallelism,
+                GrammarConstants.DEFAULT_MAX_IN_FLIGHT_JOBS,
+                GrammarConstants.DEFAULT_CACHE_PRESSURE_CHECK_INTERVAL,
+                GrammarConstants.DEFAULT_MEMORY_PRESSURE_THRESHOLD_PERCENT);
+    }
 
+    /**
+     * Converts source files and returns aggregated execution statistics with memory controls.
+     */
     public ConversionStats convertFileTreeWithStats(
             final File sourceRoot,
             final List<File> sourceFiles,
@@ -155,10 +215,22 @@ public final class DynamicAntlrXmlAstConverter {
             final boolean continueOnError,
             final String executionModelName,
             final int configuredParallelism,
-            final Consumer<String> outcomeLogger) {
+            final int maxInFlightJobs,
+            final int cachePressureCheckInterval,
+            final int memoryPressureThresholdPercent) {
         // Guard: Parallelism constraints
         if (configuredParallelism < 1) {
             throw new IllegalArgumentException("configuredParallelism must be >= 1, got: " + configuredParallelism);
+        }
+        if (maxInFlightJobs < 1) {
+            throw new IllegalArgumentException("maxInFlightJobs must be >= 1, got: " + maxInFlightJobs);
+        }
+        if (cachePressureCheckInterval < 1) {
+            throw new IllegalArgumentException("cachePressureCheckInterval must be >= 1, got: " + cachePressureCheckInterval);
+        }
+        if (memoryPressureThresholdPercent < 50 || memoryPressureThresholdPercent > 98) {
+            throw new IllegalArgumentException("memoryPressureThresholdPercent must be between 50 and 98, got: "
+                    + memoryPressureThresholdPercent);
         }
 
         final Consumer<String> safeOutcomeLogger = outcomeLogger == null ? System.out::println : outcomeLogger;
@@ -195,7 +267,9 @@ public final class DynamicAntlrXmlAstConverter {
                         continueOnError,
                         executionModel,
                         workerLimit,
-                        safeOutcomeLogger);
+                        Math.max(workerLimit, maxInFlightJobs),
+                        cachePressureCheckInterval,
+                        memoryPressureThresholdPercent);
 
                 return processOutcomes(outcomes, runStartNanos);
             }
@@ -233,24 +307,49 @@ public final class DynamicAntlrXmlAstConverter {
     private ConversionStats processOutcomes(
             final List<ConversionOutcome> outcomes,
             final long runStartNanos) {
-        final List<String> failures = new ArrayList<>();
+        final List<String> retainedFailures = new ArrayList<>();
         long cumulativeFileProcessingNanos = 0L;
+        int failureCount = 0;
 
         for (ConversionOutcome outcome : outcomes) {
             cumulativeFileProcessingNanos += outcome.durationNanos();
-            if (!outcome.success()) {
-                failures.add(outcome.failureMessage());
+            if (outcome.success()) {
+                System.out.println(outcome.successLine());
+            } else {
+                failureCount++;
+                if (retainedFailures.size() < MAX_RETAINED_FAILURE_MESSAGES) {
+                    retainedFailures.add(outcome.failureMessage());
+                }
+            }
+        }
+        
+        // Print detailed parse errors inline
+        for (String failure : retainedFailures) {
+            if (failure.startsWith("Parse failed for")) {
+                final int colonIdx = failure.indexOf(": ");
+                if (colonIdx > 0) {
+                    final String filePath = failure.substring("Parse failed for ".length(), colonIdx);
+                    final String messages = failure.substring(colonIdx + 2);
+                    for (String msg : messages.split(" \\| ")) {
+                        System.out.println(filePath + " " + msg.trim());
+                    }
+                }
             }
         }
 
         final ConversionStats stats = new ConversionStats(
                 outcomes.size(),
-                failures.size(),
+                failureCount,
                 System.nanoTime() - runStartNanos,
                 cumulativeFileProcessingNanos);
-
-        if (!failures.isEmpty()) {
-            throw new ConversionFailedException(String.join(" || ", failures), stats);
+        
+        if (failureCount > 0) {
+            final int droppedFailureMessages = Math.max(0, failureCount - retainedFailures.size());
+            if (droppedFailureMessages > 0) {
+                retainedFailures.add("... " + droppedFailureMessages
+                        + " additional parse failure(s) omitted to cap in-memory aggregation");
+            }
+            throw new ConversionFailedException(String.join(" || ", retainedFailures), stats);
         }
         return stats;
     }
@@ -263,16 +362,20 @@ public final class DynamicAntlrXmlAstConverter {
             final boolean continueOnError,
             final ExecutionModel executionModel,
             final int workerLimit,
-            final Consumer<String> outcomeLogger) throws Exception {
+            final int maxInFlightJobs,
+            final int cachePressureCheckInterval,
+            final int memoryPressureThresholdPercent) throws Exception {
         if (jobs.isEmpty()) {
             return List.of();
         }
         if (executionModel == ExecutionModel.SEQUENTIAL || workerLimit <= 1 || jobs.size() == 1) {
             final List<ConversionOutcome> outcomes = new ArrayList<>();
+            int processedCount = 0;
             for (ConversionJob job : jobs) {
                 final ConversionOutcome outcome = processSingleFile(job, binding, startRule, compression, outcomeLogger);
                 outcomes.add(outcome);
-                emitOutcomeLog(outcome, outcomeLogger);
+                processedCount++;
+                applyMemoryPressureControl(processedCount, binding, cachePressureCheckInterval, memoryPressureThresholdPercent);
                 if (!continueOnError && !outcome.success()) {
                     break;
                 }
@@ -283,40 +386,97 @@ public final class DynamicAntlrXmlAstConverter {
         final ExecutorService executor = createExecutor(executionModel);
         final Semaphore permits = new Semaphore(workerLimit);
         final CompletionService<ConversionOutcome> completion = new ExecutorCompletionService<>(executor);
-        final List<Future<ConversionOutcome>> submitted = new ArrayList<>();
+        final List<Future<ConversionOutcome>> inFlight = new ArrayList<>();
+        final AtomicInteger submittedIndex = new AtomicInteger(0);
         try {
-            for (ConversionJob job : jobs) {
-                submitted.add(completion.submit(() -> {
-                    permits.acquire();
-                    try {
-                        return processSingleFile(job, binding, startRule, compression, outcomeLogger);
-                    } finally {
-                        permits.release();
-                    }
-                }));
-            }
+            fillInFlightWindow(jobs, binding, startRule, compression, completion, permits, inFlight, submittedIndex, maxInFlightJobs);
 
             final List<ConversionOutcome> outcomes = new ArrayList<>();
-            for (int i = 0; i < jobs.size(); i++) {
+            int processedCount = 0;
+            while (!inFlight.isEmpty()) {
                 final ConversionOutcome outcome;
                 try {
                     outcome = completion.take().get();
                 } catch (ExecutionException ex) {
                     throw unwrapExecutionException(ex);
                 }
+                processedCount++;
                 outcomes.add(outcome);
-                emitOutcomeLog(outcome, outcomeLogger);
+                inFlight.removeIf(Future::isDone);
+                applyMemoryPressureControl(processedCount, binding, cachePressureCheckInterval, memoryPressureThresholdPercent);
+
                 if (!continueOnError && !outcome.success()) {
-                    for (Future<ConversionOutcome> future : submitted) {
+                    for (Future<ConversionOutcome> future : inFlight) {
                         future.cancel(true);
                     }
                     break;
                 }
+
+                fillInFlightWindow(jobs, binding, startRule, compression, completion, permits, inFlight, submittedIndex, maxInFlightJobs);
             }
             return outcomes;
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    private void fillInFlightWindow(
+            final List<ConversionJob> jobs,
+            final RuntimeParserBinding binding,
+            final String startRule,
+            final boolean compression,
+            final CompletionService<ConversionOutcome> completion,
+            final Semaphore permits,
+            final List<Future<ConversionOutcome>> inFlight,
+            final AtomicInteger submittedIndex,
+            final int maxInFlightJobs) {
+        while (inFlight.size() < maxInFlightJobs && submittedIndex.get() < jobs.size()) {
+            final ConversionJob nextJob = jobs.get(submittedIndex.getAndIncrement());
+            inFlight.add(completion.submit(new Callable<>() {
+                @Override
+                public ConversionOutcome call() throws Exception {
+                    permits.acquire();
+                    try {
+                        return processSingleFile(nextJob, binding, startRule, compression);
+                    } finally {
+                        permits.release();
+                    }
+                }
+            }));
+        }
+    }
+
+    private void applyMemoryPressureControl(
+            final int processedCount,
+            final RuntimeParserBinding binding,
+            final int cachePressureCheckInterval,
+            final int memoryPressureThresholdPercent) {
+        if (processedCount % cachePressureCheckInterval == 0) {
+            clearSharedCaches(binding);
+            // Avoid explicit GC; rely on JVM heuristics after cache cleanup.
+        }
+    }
+
+    private void clearSharedCaches(final RuntimeParserBinding binding) {
+        try {
+            final Class<?> lexerType = binding.classLoader().loadClass(binding.lexerClassName());
+            clearSharedPredictionContextCache(lexerType);
+        } catch (Exception ignored) {
+            // Best effort cache cleanup.
+        }
+        try {
+            final Class<?> parserType = binding.classLoader().loadClass(binding.parserClassName());
+            clearSharedPredictionContextCache(parserType);
+        } catch (Exception ignored) {
+            // Best effort cache cleanup.
+        }
+    }
+
+    private int heapPressurePercent() {
+        final Runtime runtime = Runtime.getRuntime();
+        final long maxMemory = Math.max(1L, runtime.maxMemory());
+        final long usedMemory = runtime.totalMemory() - runtime.freeMemory();
+        return (int) ((usedMemory * 100L) / maxMemory);
     }
 
     private ExecutorService createExecutor(final ExecutionModel executionModel) {
@@ -351,7 +511,7 @@ public final class DynamicAntlrXmlAstConverter {
             final boolean compression,
             final Consumer<String> outcomeLogger) {
         final long fileStartNanos = System.nanoTime();
-        currentBinding.set(binding);
+        setCurrentBinding(binding);
         try {
             final String xml = parseToXml(
                     job.sourceFile().toPath(),
@@ -370,116 +530,10 @@ public final class DynamicAntlrXmlAstConverter {
                             + " " + lineCount + ":" + byteCount + " parsed",
                     durationNanos);
         } catch (Exception ex) {
-            final String message = ex.getMessage();
-            if (message != null && message.startsWith("Parse failed for ")) {
-                return ConversionOutcome.failure(job.index(), message, System.nanoTime() - fileStartNanos);
-            }
-            return ConversionOutcome.failure(
-                    job.index(),
-                    "Conversion failed for " + job.sourceFile() + ": " + describeThrowable(ex),
-                    System.nanoTime() - fileStartNanos);
+            return ConversionOutcome.failure(job.index(), firstNonBlankMessage(ex), System.nanoTime() - fileStartNanos);
         } finally {
-            currentBinding.remove();
-            binding.clearDFACaches();
-            maybeRunAggressiveGc(outcomeLogger);
-        }
-    }
-
-    private void maybeRunAggressiveGc(final Consumer<String> gcLogger) {
-        if (!Boolean.parseBoolean(System.getProperty(GC_ENABLED_PROPERTY, "false"))) {
-            return;
-        }
-
-        final int gcEveryFiles;
-        try {
-            gcEveryFiles = Integer.parseInt(System.getProperty(GC_EVERY_FILES_PROPERTY, "25"));
-        } catch (NumberFormatException ignored) {
-            return;
-        }
-
-        if (gcEveryFiles < 1) {
-            return;
-        }
-
-        final int heapThresholdPercent;
-        try {
-            heapThresholdPercent = Integer.parseInt(System.getProperty(GC_HEAP_THRESHOLD_PERCENT_PROPERTY, "80"));
-        } catch (NumberFormatException ignored) {
-            return;
-        }
-
-        if (heapThresholdPercent < 1 || heapThresholdPercent > 100) {
-            return;
-        }
-
-        final int processed = completedFilesCounter.incrementAndGet();
-        if (processed % gcEveryFiles != 0 || heapUsedPercent() < heapThresholdPercent) {
-            return;
-        }
-
-        final Runtime runtime = Runtime.getRuntime();
-        final long usedBefore = runtime.totalMemory() - runtime.freeMemory();
-
-        System.gc();
-
-        final long maxAfter = runtime.maxMemory();
-        final long totalAfter = runtime.totalMemory();
-        final long freeAfter = runtime.freeMemory();
-        final long usedAfter = totalAfter - freeAfter;
-
-        final long reclaimedBytes = Math.max(0L, usedBefore - usedAfter);
-        final double claimedPctOfMax = maxAfter <= 0L ? 0.0 : (usedAfter * 100.0) / maxAfter;
-        final double freePctOfMax = maxAfter <= 0L ? 0.0 : (freeAfter * 100.0) / maxAfter;
-
-        if (gcLogger != null) {
-            gcLogger.accept(String.format(
-                    java.util.Locale.ROOT,
-                    "[GC] files=%d reclaimed=%d MB heapUsed=%d MB (%.2f%% claimed) heapFree=%d MB (%.2f%% free) max=%d MB",
-                    processed,
-                    reclaimedBytes / (1024 * 1024),
-                    usedAfter / (1024 * 1024),
-                    claimedPctOfMax,
-                    freeAfter / (1024 * 1024),
-                    freePctOfMax,
-                    maxAfter / (1024 * 1024)
-            ));
-        }
-    }
-
-    private int heapUsedPercent() {
-        final Runtime runtime = Runtime.getRuntime();
-        final long maxMemory = runtime.maxMemory();
-        if (maxMemory <= 0L) {
-            return 0;
-        }
-        final long usedMemory = runtime.totalMemory() - runtime.freeMemory();
-        return (int) ((usedMemory * 100L) / maxMemory);
-    }
-
-    private void validateParserBinding(final RuntimeParserBinding binding) {
-        final ClassLoader parserClassLoader = binding.classLoader();
-        final String lexerName = binding.lexerClassName();
-        final String parserName = binding.parserClassName();
-
-        final Class<?> lexerRaw;
-        try {
-            lexerRaw = parserClassLoader.loadClass(lexerName);
-        } catch (ClassNotFoundException ex) {
-            throw new IllegalArgumentException("Lexer class not found on runtimeClasspath: " + lexerName, ex);
-        }
-
-        final Class<?> parserRaw;
-        try {
-            parserRaw = parserClassLoader.loadClass(parserName);
-        } catch (ClassNotFoundException ex) {
-            throw new IllegalArgumentException("Parser class not found on runtimeClasspath: " + parserName, ex);
-        }
-
-        if (!Lexer.class.isAssignableFrom(lexerRaw)) {
-            throw new IllegalArgumentException("Configured lexer class does not extend org.antlr.v4.runtime.Lexer: " + lexerName);
-        }
-        if (!Parser.class.isAssignableFrom(parserRaw)) {
-            throw new IllegalArgumentException("Configured parser class does not extend org.antlr.v4.runtime.Parser: " + parserName);
+            clearCurrentBinding();
+            binding.clearCurrentThreadCaches();
         }
     }
 
@@ -499,15 +553,24 @@ public final class DynamicAntlrXmlAstConverter {
         };
     }
 
+    /**
+     * Supported worker execution strategies for file conversion.
+     */
     private enum ExecutionModel {
         SEQUENTIAL,
         PLATFORM_THREADS,
         VIRTUAL_THREADS
     }
 
+    /**
+     * Immutable mapping of one source input to one target output path.
+     */
     private record ConversionJob(int index, File sourceFile, Path relativePath, Path output) {
     }
 
+    /**
+     * Per-file conversion result used for ordered reporting and summary statistics.
+     */
     private record ConversionOutcome(
             int index,
             boolean success,
@@ -523,6 +586,14 @@ public final class DynamicAntlrXmlAstConverter {
         }
     }
 
+    /**
+     * Aggregated conversion metrics for one converter invocation.
+     *
+     * @param processedFiles number of processed inputs.
+     * @param filesWithErrors number of inputs that failed parsing/conversion.
+     * @param totalDurationNanos wall-clock duration for the invocation.
+     * @param cumulativeFileProcessingNanos sum of all per-file durations.
+     */
     public record ConversionStats(
             int processedFiles,
             int filesWithErrors,
@@ -530,14 +601,31 @@ public final class DynamicAntlrXmlAstConverter {
             long cumulativeFileProcessingNanos) {
     }
 
+    /**
+     * Signals one or more conversion failures while preserving collected statistics.
+     */
     public static final class ConversionFailedException extends GradleException {
+        /**
+         * Aggregated stats captured at failure time.
+         */
         private final ConversionStats stats;
 
+        /**
+         * Creates a conversion failure with captured metrics.
+         *
+         * @param message failure summary.
+         * @param stats aggregated conversion metrics.
+         */
         public ConversionFailedException(final String message, final ConversionStats stats) {
             super(message);
             this.stats = stats;
         }
 
+        /**
+        * Returns conversion metrics collected before failure propagation.
+        *
+        * @return conversion metrics.
+        */
         public ConversionStats getStats() {
             return stats;
         }
@@ -818,38 +906,111 @@ public final class DynamicAntlrXmlAstConverter {
         @SuppressWarnings("unchecked") final Class<? extends Parser> parserClass = (Class<? extends Parser>) parserRaw;
 
         final Constructor<? extends Lexer> lexerCtor = lexerClass.getConstructor(org.antlr.v4.runtime.CharStream.class);
-        final Lexer lexer = lexerCtor.newInstance(CharStreams.fromPath(sourceFile, StandardCharsets.UTF_8));
-
-        final CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-
         final Constructor<? extends Parser> parserCtor = parserClass.getConstructor(org.antlr.v4.runtime.TokenStream.class);
-        final Parser parser = parserCtor.newInstance(tokenStream);
 
-        // Cache instances in binding for DFA management (must be done via reflection for private access)
+        Lexer lexer = null;
+        CommonTokenStream tokenStream = null;
+        Parser parser = null;
+        ParseTree parseTree = null;
+        CollectingErrorListener errors = null;
         try {
-            // This will be called from binding context, so we need to stash for later clearing
+            lexer = lexerCtor.newInstance(CharStreams.fromPath(sourceFile, StandardCharsets.UTF_8));
+            tokenStream = new CommonTokenStream(lexer);
+            parser = parserCtor.newInstance(tokenStream);
+
+            // Bind instances for explicit cache cleanup after each file.
             cacheParserInstances(lexer, parser);
+
+            errors = new CollectingErrorListener();
+            lexer.removeErrorListeners();
+            parser.removeErrorListeners();
+            lexer.addErrorListener(errors);
+            parser.addErrorListener(errors);
+
+            final Method entryPoint = parserClass.getMethod(startRule);
+            final Object treeObj = entryPoint.invoke(parser);
+            if (!(treeObj instanceof ParseTree parsedTree)) {
+                throw new IllegalStateException("Start rule does not return a ParseTree: " + startRule);
+            }
+            parseTree = parsedTree;
+
+            if (errors.errorCount > 0) {
+                throw new GradleException("Parse failed for " + sourceFile + ": " + String.join(" | ", errors.messages));
+            }
+
+            final String xml = toXml(parser, parseTree, sourceFile.getFileName().toString(), startRule, compression);
+            final long lineCount = countLines(sourceFile);
+            final long byteCount = Files.size(sourceFile);
+            errors.successfulParse = true;
+            errors.lineCount = lineCount;
+            errors.byteCount = byteCount;
+            return xml;
+        } finally {
+            // Drop strong references quickly to improve old-gen reclamation during long runs.
+            parseTree = null;
+            if (errors != null) {
+                errors.messages.clear();
+            }
+            if (tokenStream != null) {
+                tokenStream.setTokenSource(null);
+            }
+            if (lexer != null) {
+                lexer.removeErrorListeners();
+            }
+            if (parser != null) {
+                parser.removeErrorListeners();
+            }
+            clearAntlrStaticCaches(lexerClass, parserClass, lexer, parser);
+        }
+    }
+
+    private void clearAntlrStaticCaches(
+            final Class<? extends Lexer> lexerClass,
+            final Class<? extends Parser> parserClass,
+            final Lexer lexer,
+            final Parser parser) {
+        try {
+            if (lexer != null && lexer.getInterpreter() != null) {
+                lexer.getInterpreter().clearDFA();
+            }
         } catch (Exception ignored) {
-            // Caching is best-effort; proceed without it
+            // Best effort cache cleanup.
         }
-
-        final CollectingErrorListener errors = new CollectingErrorListener();
-        lexer.removeErrorListeners();
-        parser.removeErrorListeners();
-        lexer.addErrorListener(errors);
-        parser.addErrorListener(errors);
-
-        final Method entryPoint = parserClass.getMethod(startRule);
-        final Object treeObj = entryPoint.invoke(parser);
-        if (!(treeObj instanceof ParseTree parseTree)) {
-            throw new IllegalStateException("Start rule does not return a ParseTree: " + startRule);
+        try {
+            if (parser != null && parser.getInterpreter() != null) {
+                parser.getInterpreter().clearDFA();
+            }
+        } catch (Exception ignored) {
+            // Best effort cache cleanup.
         }
+        clearSharedPredictionContextCache(lexerClass);
+        clearSharedPredictionContextCache(parserClass);
+    }
 
-        if (errors.errorCount > 0) {
-            throw new GradleException("Parse failed for " + sourceFile + ": " + String.join(" | ", errors.messages));
+    private void clearSharedPredictionContextCache(final Class<?> antlrType) {
+        try {
+            final var sharedCacheField = antlrType.getDeclaredField("_sharedContextCache");
+            sharedCacheField.setAccessible(true);
+            final Object sharedCache = sharedCacheField.get(null);
+            if (sharedCache == null) {
+                return;
+            }
+            try {
+                final Method clearMethod = sharedCache.getClass().getMethod("clear");
+                clearMethod.invoke(sharedCache);
+                return;
+            } catch (NoSuchMethodException ignored) {
+                // Fall through to reflective map clear for ANTLR versions without a public clear().
+            }
+            final var cacheField = sharedCache.getClass().getDeclaredField("cache");
+            cacheField.setAccessible(true);
+            final Object cache = cacheField.get(sharedCache);
+            if (cache instanceof Map<?, ?> map) {
+                map.clear();
+            }
+        } catch (Exception ignored) {
+            // Best effort cache cleanup.
         }
-
-        return toXml(parser, parseTree, sourceFile.getFileName().toString(), startRule, compression);
     }
 
     private final ThreadLocal<RuntimeParserBinding> currentBinding = new ThreadLocal<>();
@@ -869,79 +1030,21 @@ public final class DynamicAntlrXmlAstConverter {
             final String sourceName,
             final String startRule,
             final boolean compression) {
-        final CompressionState compressionState = compression ? new CompressionState() : null;
-        final XmlBuilder xmlBuilder = new XmlBuilder();
+        final StringBuilder xml = new StringBuilder(16_384);
+        final Map<String, String> pathIndex = compression ? new LinkedHashMap<>() : Map.of();
 
-        xmlBuilder.writeXmlDeclaration();
-        xmlBuilder.writeStartElement("ast");
-        xmlBuilder.writeAttribute("source", sourceName);
-        xmlBuilder.writeAttribute("entryRule", startRule);
+        xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        xml.append("<ast source=\"")
+                .append(escapeXml(sourceName))
+                .append("\" entryRule=\"")
+                .append(escapeXml(startRule))
+                .append("\">\n");
 
-        appendTreeStreaming(xmlBuilder, parseTree, parser, compressionState);
-
-        if (compressionState != null && !compressionState.pathIndex.isEmpty()) {
-            appendPathIndexStreaming(xmlBuilder, compressionState.pathIndex);
-        }
-
-        xmlBuilder.writeEndElement();
-        return xmlBuilder.getXml();
+        appendTreeXml(xml, parseTree, parser, 1, compression, pathIndex);
+        appendPathIndexXml(xml, pathIndex, 1);
+        xml.append("</ast>\n");
+        return xml.toString();
     }
-
-    private void appendTreeStreaming(
-            final XmlBuilder xmlBuilder,
-            final ParseTree node,
-            final Parser parser,
-            final CompressionState compressionState) {
-        if (node instanceof RuleNode ruleNode) {
-            final int ruleIndex = ruleNode.getRuleContext().getRuleIndex();
-            final String ruleName = parser.getRuleNames()[ruleIndex];
-
-            xmlBuilder.writeStartElement("r");
-            xmlBuilder.writeAttribute("name", ruleName);
-
-            ParseTree traversalNode = node;
-            if (compressionState != null) {
-                final CompressionChain chain = trackCompressionChain(node, parser);
-                if (chain.length >= 2) {
-                    final String pathId = compressionState.registerPath(chain.names);
-                    xmlBuilder.writeAttribute("pathId", pathId);
-                    // Flatten compressed chain by traversing children from the chain tail.
-                    traversalNode = chain.tailNode;
-                }
-            }
-
-            for (int i = 0; i < traversalNode.getChildCount(); i++) {
-                appendTreeStreaming(xmlBuilder, traversalNode.getChild(i), parser, compressionState);
-            }
-
-            xmlBuilder.writeEndElement();
-            return;
-        }
-
-        if (node instanceof TerminalNode terminalNode) {
-            final Token token = terminalNode.getSymbol();
-            final String type = tokenName(parser, token);
-
-            xmlBuilder.writeStartElement("t");
-            xmlBuilder.writeAttribute("type", type);
-            xmlBuilder.writeAttribute("line", String.valueOf(token.getLine()));
-            xmlBuilder.writeAttribute("column", String.valueOf(token.getCharPositionInLine()));
-            xmlBuilder.writeCharacters(token.getText());
-            xmlBuilder.writeEndElement();
-            return;
-        }
-
-        xmlBuilder.writeStartElement("node");
-        xmlBuilder.writeCharacters(node.getText());
-        xmlBuilder.writeEndElement();
-    }
-
-
-    private CompressionChain trackCompressionChain(
-            final ParseTree node,
-            final Parser parser) {
-        final CompressionChain chain = new CompressionChain();
-        ParseTree current = node;
 
         while (current.getChildCount() == 1) {
             if (!(current instanceof RuleNode currentRuleNode)) {
@@ -972,24 +1075,106 @@ public final class DynamicAntlrXmlAstConverter {
         return chain;
     }
 
-    private void appendPathIndexStreaming(
-            final XmlBuilder xmlBuilder,
-            final Map<String, String> pathIndex) {
+    private void appendPathIndexXml(
+            final StringBuilder xml,
+            final Map<String, String> pathIndex,
+            final int indentLevel) {
         if (pathIndex.isEmpty()) {
             return;
         }
-
-        xmlBuilder.writeStartElement("pathIndex");
+        indent(xml, indentLevel).append("<pathIndex>\n");
         for (Map.Entry<String, String> entry : pathIndex.entrySet()) {
-            xmlBuilder.writeStartElement("path");
-            xmlBuilder.writeAttribute("id", entry.getKey());
-            xmlBuilder.writeAttribute("value", entry.getValue());
-            xmlBuilder.writeEndElement();
+            indent(xml, indentLevel + 1)
+                    .append("<path id=\"")
+                    .append(escapeXml(entry.getKey()))
+                    .append("\" value=\"")
+                    .append(escapeXml(entry.getValue()))
+                    .append("\"/>\n");
         }
-        xmlBuilder.writeEndElement();
+        indent(xml, indentLevel).append("</pathIndex>\n");
     }
 
+    private void appendTreeXml(
+            final StringBuilder xml,
+            final ParseTree node,
+            final Parser parser,
+            final int indentLevel,
+            final boolean compression,
+            final Map<String, String> pathIndex) {
+        if (node instanceof RuleNode ruleNode) {
+            RuleNode emissionNode = ruleNode;
+            final List<String> chain = compression ? new ArrayList<>() : List.of();
+            if (compression) {
+                chain.add(ruleName(parser, emissionNode));
+                while (emissionNode.getChildCount() == 1 && emissionNode.getChild(0) instanceof RuleNode childRule) {
+                    emissionNode = childRule;
+                    chain.add(ruleName(parser, emissionNode));
+                }
+            }
 
+            final String ruleName = compression && !chain.isEmpty() ? chain.get(0) : ruleName(parser, ruleNode);
+            indent(xml, indentLevel).append("<rule name=\"").append(escapeXml(ruleName)).append("\"");
+            if (compression && chain.size() >= 2) {
+                final String path = String.join("/", chain);
+                final String pathId = ensureUniquePathId(path, pathIndex);
+                xml.append(" pathId=\"").append(pathId).append("\"");
+            }
+            xml.append(">\n");
+            for (int i = 0; i < emissionNode.getChildCount(); i++) {
+                appendTreeXml(xml, emissionNode.getChild(i), parser, indentLevel + 1, compression, pathIndex);
+            }
+            indent(xml, indentLevel).append("</rule>\n");
+            return;
+        }
+
+        if (node instanceof TerminalNode terminalNode) {
+            final Token token = terminalNode.getSymbol();
+            indent(xml, indentLevel)
+                    .append("<token type=\"")
+                    .append(escapeXml(tokenName(parser, token)))
+                    .append("\" line=\"")
+                    .append(token.getLine())
+                    .append("\" column=\"")
+                    .append(token.getCharPositionInLine())
+                    .append("\">")
+                    .append(escapeXml(token.getText()))
+                    .append("</token>\n");
+            return;
+        }
+
+        indent(xml, indentLevel)
+                .append("<node>")
+                .append(escapeXml(node.getText()))
+                .append("</node>\n");
+    }
+
+    private String ruleName(final Parser parser, final RuleNode ruleNode) {
+        final int ruleIndex = ruleNode.getRuleContext().getRuleIndex();
+        return parser.getRuleNames()[ruleIndex];
+    }
+
+    private StringBuilder indent(final StringBuilder xml, final int level) {
+        return xml.append("  ".repeat(Math.max(0, level)));
+    }
+
+    private String escapeXml(final String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        final StringBuilder escaped = new StringBuilder(value.length() + 16);
+        for (int i = 0; i < value.length(); i++) {
+            final char ch = value.charAt(i);
+            switch (ch) {
+                case '&' -> escaped.append("&amp;");
+                case '<' -> escaped.append("&lt;");
+                case '>' -> escaped.append("&gt;");
+                case '\"' -> escaped.append("&quot;");
+                case '\'' -> escaped.append("&apos;");
+                default -> escaped.append(ch);
+            }
+        }
+        return escaped.toString();
+    }
 
     private String tokenName(final Parser parser, final Token token) {
         final String symbolic = parser.getVocabulary().getSymbolicName(token.getType());
@@ -1003,54 +1188,16 @@ public final class DynamicAntlrXmlAstConverter {
         return Integer.toString(token.getType());
     }
 
-    private static final class CompressionState {
-        private final Map<String, String> pathIndex = new LinkedHashMap<>();
-
-        private String registerPath(final List<String> names) {
-            final String path = String.join("/", names);
-            int attempt = 0;
-            while (true) {
-                final String id = shortHash(attempt == 0 ? path : path + "#" + attempt);
-                final String existing = pathIndex.get(id);
-                if (existing == null) {
-                    pathIndex.put(id, path);
-                    return id;
-                }
-                if (existing.equals(path)) {
-                    return id;
-                }
-                attempt++;
-            }
-        }
-
-        private static String shortHash(final String value) {
-            try {
-                final MessageDigest digest = MessageDigest.getInstance("SHA-256");
-                final byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-                final StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < 8; i++) {
-                    sb.append(String.format("%02x", bytes[i]));
-                }
-                return sb.toString();
-            } catch (Exception ex) {
-                throw new IllegalStateException("Failed to hash compression path", ex);
-            }
-        }
-    }
-
-    private static final class CompressionChain {
-        private final List<String> names = new ArrayList<>();
-        private int length = 0;
-        private ParseTree tailNode;
-    }
-
+    /**
+     * Holds runtime parser/lexer loading metadata and provides best-effort cache cleanup hooks.
+     */
     private static final class RuntimeParserBinding implements AutoCloseable {
         private final ClassLoader classLoaderField;
         private final String lexerClassName;
         private final String parserClassName;
         private final Path workspace;
-        private volatile Lexer cachedLexer;
-        private volatile Parser cachedParser;
+        private final ThreadLocal<Lexer> cachedLexerByThread = new ThreadLocal<>();
+        private final ThreadLocal<Parser> cachedParserByThread = new ThreadLocal<>();
 
         private RuntimeParserBinding(
                 final ClassLoader classLoader,
@@ -1076,30 +1223,32 @@ public final class DynamicAntlrXmlAstConverter {
         }
 
         private void setCachedInstances(final Lexer lexer, final Parser parser) {
-            this.cachedLexer = lexer;
-            this.cachedParser = parser;
+            this.cachedLexerByThread.set(lexer);
+            this.cachedParserByThread.set(parser);
         }
 
-        private void clearDFACaches() {
+        private void clearCurrentThreadCaches() {
             try {
+                final Lexer cachedLexer = cachedLexerByThread.get();
                 if (cachedLexer != null) {
                     cachedLexer.getInterpreter().clearDFA();
                 }
+                final Parser cachedParser = cachedParserByThread.get();
                 if (cachedParser != null) {
                     cachedParser.getInterpreter().clearDFA();
                 }
             } catch (Exception ignored) {
                 // Best effort DFA clearing
             } finally {
-                cachedLexer = null;
-                cachedParser = null;
+                cachedLexerByThread.remove();
+                cachedParserByThread.remove();
             }
         }
 
         @Override
         public void close() {
             // Clear DFA on binding close
-            clearDFACaches();
+            clearCurrentThreadCaches();
             if (classLoaderField instanceof URLClassLoader closable) {
                 try {
                     closable.close();
@@ -1128,6 +1277,9 @@ public final class DynamicAntlrXmlAstConverter {
         }
     }
 
+    /**
+     * Collects lexer/parser syntax diagnostics for one file conversion.
+     */
     private static final class CollectingErrorListener extends BaseErrorListener {
         private int errorCount;
         private final List<String> messages = new ArrayList<>();

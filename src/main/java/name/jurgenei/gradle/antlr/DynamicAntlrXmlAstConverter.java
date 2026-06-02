@@ -66,6 +66,12 @@ public final class DynamicAntlrXmlAstConverter {
     private final AtomicInteger completedFilesCounter = new AtomicInteger();
 
     /**
+     * Creates a converter instance.
+     */
+    public DynamicAntlrXmlAstConverter() {
+    }
+
+    /**
      * Converts a list of source files relative to a source root into XML AST output files.
      *
      * @param sourceRoot root directory used to preserve relative output paths.
@@ -78,6 +84,7 @@ public final class DynamicAntlrXmlAstConverter {
      * @param startRule parser entry rule method name.
      * @param compression enables rule-chain compression and path index emission when true.
      * @param continueOnError when true, keeps converting remaining files and aggregates failures.
+     * @param outcomeLogger optional per-file outcome logger; when null, logs to standard output.
      * @throws GradleException when parsing or XML generation fails.
      */
     public void convertFileTree(
@@ -141,7 +148,24 @@ public final class DynamicAntlrXmlAstConverter {
                 );
     }
 
-
+    /**
+     * Converts files and returns aggregate conversion statistics.
+     *
+     * @param sourceRoot root directory used to preserve relative output paths.
+     * @param sourceFiles source files to parse.
+     * @param destinationRoot output root directory receiving generated XML files.
+     * @param targetExtension output extension appended to mapped source filenames.
+     * @param classLoader class loader containing runtime dependencies and parser/lexer classes.
+     * @param lexerClassName lexer class name or grammar coordinate.
+     * @param parserClassName parser class name or grammar coordinate.
+     * @param startRule parser entry rule method name.
+     * @param compression enables rule-chain compression and path index emission when true.
+     * @param continueOnError when true, keeps converting remaining files and aggregates failures.
+     * @param executionModelName execution model name.
+     * @param configuredParallelism configured parallelism for threaded models.
+     * @param outcomeLogger optional per-file outcome logger; when null, logs to standard output.
+     * @return conversion statistics for processed files.
+     */
     public ConversionStats convertFileTreeWithStats(
             final File sourceRoot,
             final List<File> sourceFiles,
@@ -523,6 +547,14 @@ public final class DynamicAntlrXmlAstConverter {
         }
     }
 
+    /**
+     * Aggregate conversion statistics for a conversion run.
+     *
+     * @param processedFiles total number of files processed.
+     * @param filesWithErrors number of files that failed conversion.
+     * @param totalDurationNanos wall-clock duration for the run.
+     * @param cumulativeFileProcessingNanos sum of per-file processing times.
+     */
     public record ConversionStats(
             int processedFiles,
             int filesWithErrors,
@@ -530,14 +562,29 @@ public final class DynamicAntlrXmlAstConverter {
             long cumulativeFileProcessingNanos) {
     }
 
+    /**
+     * Exception raised when one or more file conversions fail.
+     */
     public static final class ConversionFailedException extends GradleException {
+        /** Conversion statistics captured at failure time. */
         private final ConversionStats stats;
 
+        /**
+         * Creates a conversion failure exception.
+         *
+         * @param message failure message.
+         * @param stats conversion statistics captured at failure time.
+         */
         public ConversionFailedException(final String message, final ConversionStats stats) {
             super(message);
             this.stats = stats;
         }
 
+        /**
+         * Returns conversion statistics captured at failure time.
+         *
+         * @return conversion statistics.
+         */
         public ConversionStats getStats() {
             return stats;
         }

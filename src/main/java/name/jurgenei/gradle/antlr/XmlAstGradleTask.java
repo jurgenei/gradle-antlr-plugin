@@ -75,6 +75,11 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     private final Property<Integer> gcHeapThresholdPercent;
     private final ConfigurableFileCollection runtimeClasspath;
 
+    /**
+     * Creates the task and configures default conventions.
+     *
+     * @param objects Gradle object factory.
+     */
     @Inject
     public XmlAstGradleTask(final ObjectFactory objects) {
         this.projectDirPath = getProject().getProjectDir().getAbsolutePath();
@@ -307,9 +312,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     /**
      * Enables rule-chain compression for generated XML AST output.
      *
-     * <p>When enabled, single-child `<rule>` chains of length {@code >= 2} are flattened,
-     * the chain head receives a `pathId` attribute, and a `<pathIndex>` section is appended
-     * to the AST root with `id -> path` mappings.</p>
+     * <p>When enabled, single-child {@code <rule>} chains of length {@code >= 2} are flattened,
+     * the chain head receives a {@code pathId} attribute, and a {@code <pathIndex>} section is appended
+     * to the AST root with {@code id -> path} mappings.</p>
      *
      * @return compression flag property.
      */

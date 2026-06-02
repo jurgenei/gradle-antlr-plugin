@@ -85,7 +85,7 @@ public final class XmlBuilder {
     }
 
     /**
-     * Writes XML declaration (<?xml version="1.0" encoding="UTF-8"?>).
+     * Writes XML declaration ({@code <?xml version="1.0" encoding="UTF-8"?>}).
      */
     public void writeXmlDeclaration() {
         xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");

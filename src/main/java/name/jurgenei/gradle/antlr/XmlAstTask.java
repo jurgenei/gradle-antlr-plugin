@@ -285,7 +285,8 @@ public abstract class XmlAstTask extends DefaultTask {
                             resolvedConfig.parserClassName(),
                             resolvedConfig.startRule(),
                             compression.get(),
-                            true);
+                            true,
+                            m -> getLogger().lifecycle(m));
                 }
             }
         } catch (Exception ex) {
@@ -352,10 +353,7 @@ public abstract class XmlAstTask extends DefaultTask {
                 || trimmed.contains("/");
     }
 
-    private record ResolvedCatalogConfig(String runtimeGrammar, String startRule) {
-    }
-
-    private URLClassLoader createRuntimeClassLoader() throws Exception {
+    private URLClassLoader createRuntimeClassLoader() {
         final URL[] runtimeUrls = runtimeClasspath.getFiles().stream()
                 .map(File::toPath)
                 .map(Path::toUri)

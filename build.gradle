@@ -22,7 +22,6 @@ java {
 
 repositories {
     mavenCentral()
-    gradlePluginPortal()
 }
 
 dependencies {
@@ -118,6 +117,7 @@ spotbugs {
     ignoreFailures = false
     effort = com.github.spotbugs.snom.Effort.valueOf('DEFAULT')
     reportLevel = com.github.spotbugs.snom.Confidence.valueOf('HIGH')
+    excludeFilter = file('spotbugs-exclude.xml')
 }
 
 tasks.named('spotbugsMain') {

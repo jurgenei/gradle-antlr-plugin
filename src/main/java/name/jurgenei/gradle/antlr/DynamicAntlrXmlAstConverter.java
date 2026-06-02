@@ -31,7 +31,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,7 +45,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -60,6 +58,13 @@ import java.util.stream.Stream;
  * as superclass types are available through the provided runtime classloader classpath.</p>
  */
 public final class DynamicAntlrXmlAstConverter {
+    private static final int MAX_OUTCOME_LOG_LINE_LENGTH = 225;
+    private static final String LOG_TRUNCATION_SUFFIX = "...";
+    private static final String GC_ENABLED_PROPERTY = "xmlast.gc.enabled";
+    private static final String GC_EVERY_FILES_PROPERTY = "xmlast.gc.every.files";
+    private static final String GC_HEAP_THRESHOLD_PERCENT_PROPERTY = "xmlast.gc.heap.threshold.percent";
+
+    private final AtomicInteger completedFilesCounter = new AtomicInteger();
 
     private static final int MAX_RETAINED_FAILURE_MESSAGES = 256;
 
@@ -94,7 +99,8 @@ public final class DynamicAntlrXmlAstConverter {
             final String parserClassName,
             final String startRule,
             final boolean compression,
-            final boolean continueOnError) {
+            final boolean continueOnError,
+            final Consumer<String> outcomeLogger) {
         // Guard: Null checks
         java.util.Objects.requireNonNull(sourceRoot, "sourceRoot cannot be null");
         java.util.Objects.requireNonNull(sourceFiles, "sourceFiles cannot be null");
@@ -227,6 +233,8 @@ public final class DynamicAntlrXmlAstConverter {
                     + memoryPressureThresholdPercent);
         }
 
+        final Consumer<String> safeOutcomeLogger = outcomeLogger == null ? System.out::println : outcomeLogger;
+
         // Guard: Execution model validation
         if (executionModelName != null && !executionModelName.isBlank()) {
             final String upperModel = executionModelName.trim().toUpperCase();
@@ -244,12 +252,13 @@ public final class DynamicAntlrXmlAstConverter {
             Files.createDirectories(destinationRoot.toPath());
 
             try (RuntimeParserBinding binding = prepareParserBinding(classLoader, lexerClassName, parserClassName)) {
+                validateParserBinding(binding);
                 final List<ConversionJob> jobs = buildConversionJobs(sourceRoot, sourceFiles, destinationRoot, targetExtension);
                 
                 final ExecutionModel executionModel = parseExecutionModel(executionModelName);
                 final int workerLimit = executionModel == ExecutionModel.SEQUENTIAL
                         ? 1
-                        : Math.max(1, configuredParallelism);
+                        : configuredParallelism;
                 final List<ConversionOutcome> outcomes = executeJobs(
                         jobs,
                         binding,
@@ -302,8 +311,6 @@ public final class DynamicAntlrXmlAstConverter {
         long cumulativeFileProcessingNanos = 0L;
         int failureCount = 0;
 
-        outcomes.sort(Comparator.comparingInt(ConversionOutcome::index));
-        
         for (ConversionOutcome outcome : outcomes) {
             cumulativeFileProcessingNanos += outcome.durationNanos();
             if (outcome.success()) {
@@ -365,7 +372,7 @@ public final class DynamicAntlrXmlAstConverter {
             final List<ConversionOutcome> outcomes = new ArrayList<>();
             int processedCount = 0;
             for (ConversionJob job : jobs) {
-                final ConversionOutcome outcome = processSingleFile(job, binding, startRule, compression);
+                final ConversionOutcome outcome = processSingleFile(job, binding, startRule, compression, outcomeLogger);
                 outcomes.add(outcome);
                 processedCount++;
                 applyMemoryPressureControl(processedCount, binding, cachePressureCheckInterval, memoryPressureThresholdPercent);
@@ -489,11 +496,20 @@ public final class DynamicAntlrXmlAstConverter {
         return new Exception(cause);
     }
 
+    private void emitOutcomeLog(final ConversionOutcome outcome, final Consumer<String> outcomeLogger) {
+        if (outcome.success()) {
+            outcomeLogger.accept(truncateOutcomeLogLine("[SUCCESS] " + outcome.successLine()));
+            return;
+        }
+        outcomeLogger.accept(truncateOutcomeLogLine("[FAILURE] " + outcome.failureMessage()));
+    }
+
     private ConversionOutcome processSingleFile(
             final ConversionJob job,
             final RuntimeParserBinding binding,
             final String startRule,
-            final boolean compression) {
+            final boolean compression,
+            final Consumer<String> outcomeLogger) {
         final long fileStartNanos = System.nanoTime();
         setCurrentBinding(binding);
         try {
@@ -625,6 +641,14 @@ public final class DynamicAntlrXmlAstConverter {
             current = current.getCause();
         }
         return "Unknown conversion failure";
+    }
+
+    private String describeThrowable(final Throwable throwable) {
+        final String message = firstNonBlankMessage(throwable);
+        if (message.isBlank()) {
+            return throwable.getClass().getName();
+        }
+        return throwable.getClass().getName() + ": " + message;
     }
 
     private RuntimeParserBinding prepareParserBinding(
@@ -828,7 +852,7 @@ public final class DynamicAntlrXmlAstConverter {
     }
 
     private String resolveGeneratedFqcn(final Path generatedDir, final String simpleClassName) throws IOException {
-        Path source = null;
+        final Path source;
         try (Stream<Path> stream = Files.walk(generatedDir)) {
             source = stream
                     .filter(path -> path.getFileName().toString().equals(simpleClassName + ".java"))
@@ -845,7 +869,6 @@ public final class DynamicAntlrXmlAstConverter {
             for (String line : (Iterable<String>) lines::iterator) {
                 final String trimmed = line.trim();
                 if (GrammarConstants.PACKAGE_DECLARATION_PATTERN.matcher(trimmed).find()) {
-                    final Matcher matcher = GrammarConstants.PACKAGE_DECLARATION_PATTERN.matcher(trimmed);
                     packageName = trimmed.substring("package ".length(), trimmed.length() - 1).trim();
                     break;
                 }
@@ -992,14 +1015,7 @@ public final class DynamicAntlrXmlAstConverter {
 
     private final ThreadLocal<RuntimeParserBinding> currentBinding = new ThreadLocal<>();
 
-    // Store the current binding temporarily for use in parseToXml context
-    private void setCurrentBinding(final RuntimeParserBinding binding) {
-        currentBinding.set(binding);
-    }
-
-    private void clearCurrentBinding() {
-        currentBinding.remove();
-    }
+    // ...existing code...
 
     private void cacheParserInstances(final Lexer lexer, final Parser parser) {
         final RuntimeParserBinding binding = currentBinding.get();
@@ -1030,34 +1046,33 @@ public final class DynamicAntlrXmlAstConverter {
         return xml.toString();
     }
 
-    private String ensureUniquePathId(final String path, final Map<String, String> pathIndex) {
-        int attempt = 0;
-        while (true) {
-            final String id = shortHash(attempt == 0 ? path : path + "#" + attempt);
-            final String existing = pathIndex.get(id);
-            if (existing == null) {
-                pathIndex.put(id, path);
-                return id;
+        while (current.getChildCount() == 1) {
+            if (!(current instanceof RuleNode currentRuleNode)) {
+                break;
             }
-            if (existing.equals(path)) {
-                return id;
-            }
-            attempt++;
-        }
-    }
+            final int currentRuleIndex = currentRuleNode.getRuleContext().getRuleIndex();
+            final String currentRuleName = parser.getRuleNames()[currentRuleIndex];
+            chain.names.add(currentRuleName);
+            chain.tailNode = current;
 
-    private String shortHash(final String value) {
-        try {
-            final MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            final byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-            final StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < 8; i++) {
-                sb.append(String.format("%02x", bytes[i]));
+            final ParseTree child = current.getChild(0);
+            if (child instanceof RuleNode) {
+                current = child;
+            } else {
+                break;
             }
-            return sb.toString();
-        } catch (Exception ex) {
-            throw new IllegalStateException("Failed to hash compression path", ex);
         }
+
+        // Include current rule if loop ended before adding it (e.g. no single child rule).
+        if (chain.names.isEmpty() && current instanceof RuleNode currentRuleNode) {
+            final int currentRuleIndex = currentRuleNode.getRuleContext().getRuleIndex();
+            final String currentRuleName = parser.getRuleNames()[currentRuleIndex];
+            chain.names.add(currentRuleName);
+            chain.tailNode = current;
+        }
+
+        chain.length = chain.names.size();
+        return chain;
     }
 
     private void appendPathIndexXml(
@@ -1268,9 +1283,6 @@ public final class DynamicAntlrXmlAstConverter {
     private static final class CollectingErrorListener extends BaseErrorListener {
         private int errorCount;
         private final List<String> messages = new ArrayList<>();
-        private boolean successfulParse;
-        private long lineCount;
-        private long byteCount;
 
         @Override
         public void syntaxError(
@@ -1294,5 +1306,17 @@ public final class DynamicAntlrXmlAstConverter {
     private String toPortablePath(final Path relativePath) {
         return relativePath.toString().replace(File.separatorChar, '/');
     }
+
+    private String truncateOutcomeLogLine(final String line) {
+        if (line == null) {
+            return "";
+        }
+        if (line.length() <= MAX_OUTCOME_LOG_LINE_LENGTH) {
+            return line;
+        }
+        final int prefixLength = Math.max(0, MAX_OUTCOME_LOG_LINE_LENGTH - LOG_TRUNCATION_SUFFIX.length());
+        return line.substring(0, prefixLength) + LOG_TRUNCATION_SUFFIX;
+    }
+
 
 }

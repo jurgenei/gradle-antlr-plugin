@@ -465,9 +465,32 @@ public abstract class XmlAstGradleTask extends DefaultTask {
                     cachePressureCheckIntervalValue,
                     memoryPressureThresholdPercentValue);
         } catch (Exception ex) {
-            conversionStats = handleConversionException(ex, failures, jobs, runStartNanos);
-            fallbackFilesWithErrors = conversionStats == null ? findParseFailureMessages(ex).size() : 0;
+            // Preserve converter stats for summary even when fail-fast rethrows.
+            conversionStats = findConversionStats(ex);
+            if (conversionStats != null) {
+                fallbackFilesWithErrors = Math.max(0, conversionStats.filesWithErrors());
+            }
+            conversionStats = handleConversionException(ex, failures);
+            if (conversionStats == null && fallbackFilesWithErrors == 0) {
+                fallbackFilesWithErrors = findParseFailureMessages(ex).size();
+            }
         } finally {
+            if (previousGcEnabled == null) {
+                System.clearProperty("xmlast.gc.enabled");
+            } else {
+                System.setProperty("xmlast.gc.enabled", previousGcEnabled);
+            }
+            if (previousGcEveryFiles == null) {
+                System.clearProperty("xmlast.gc.every.files");
+            } else {
+                System.setProperty("xmlast.gc.every.files", previousGcEveryFiles);
+            }
+            if (previousGcHeapThresholdPercent == null) {
+                System.clearProperty("xmlast.gc.heap.threshold.percent");
+            } else {
+                System.setProperty("xmlast.gc.heap.threshold.percent", previousGcHeapThresholdPercent);
+            }
+
             if (conversionStats == null) {
                 conversionStats = new DynamicAntlrXmlAstConverter.ConversionStats(
                         jobs.size(),
@@ -491,22 +514,25 @@ public abstract class XmlAstGradleTask extends DefaultTask {
      */
     private DynamicAntlrXmlAstConverter.ConversionStats handleConversionException(
             final Exception ex,
-            final List<String> failures,
-            final List<File> jobs,
-            final long runStartNanos) {
-        final DynamicAntlrXmlAstConverter.ConversionStats extractedStats = findConversionStats(ex);
-        DynamicAntlrXmlAstConverter.ConversionStats result = extractedStats;
-        
-        final String message = "xmlast conversion failed: " + ex.getMessage();
+            final List<String> failures) {
+        final DynamicAntlrXmlAstConverter.ConversionStats stats = findConversionStats(ex);
+
+        final List<String> parseMessages = findParseFailureMessages(ex);
+        final String message;
+        if (suppressStackTrace.get() && !parseMessages.isEmpty()) {
+            message = "xmlast conversion failed: " + parseMessages.size() + " file(s) failed; see [FAILURE] lines above";
+        } else {
+            message = "xmlast conversion failed: " + mostRelevantMessage(ex);
+        }
         logLifecycleFailure(ex);
-        
+
         if (failOnError.get() && failOnTransformationError.get()) {
             if (suppressStackTrace.get()) {
                 throw new GradleException(message);
             }
             throw new GradleException(message, ex);
         }
-        
+
         failures.add(message);
         if (suppressStackTrace.get()) {
             getLogger().warn(message);
@@ -514,15 +540,15 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             getLogger().warn(message, ex);
         }
         
-        return result;
+        return stats;
     }
 
     /**
      * Validates the file extension configuration and returns the value.
      */
     private String validateAndGetExtension() {
-        String extension = targetExtension.get();
-        if (extension == null || extension.isBlank()) {
+        final String extension = targetExtension.get();
+        if (extension.isBlank()) {
             throw new GradleException("targetExtension is not configured");
         }
         return extension;
@@ -543,8 +569,8 @@ public abstract class XmlAstGradleTask extends DefaultTask {
      * Validates the execution model configuration and returns the value.
      */
     private String validateAndGetExecutionModel() {
-        String executionModelValue = executionModel.get();
-        if (executionModelValue != null && !executionModelValue.isBlank()) {
+        final String executionModelValue = executionModel.get();
+        if (!executionModelValue.isBlank()) {
             final String upperModel = executionModelValue.trim().toUpperCase();
             if (!upperModel.equals(GrammarConstants.EXECUTION_MODEL_SEQUENTIAL)
                     && !upperModel.equals(GrammarConstants.EXECUTION_MODEL_PLATFORM_THREADS)
@@ -759,6 +785,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             final File targetFile = destinationRoot.resolve(mapTarget(relativePath.toString())).toFile();
             if (!targetFile.exists() || sourceFile.lastModified() >= targetFile.lastModified() || targetFile.length() == 0L) {
                 toConvert.add(sourceFile);
+            } else {
+                final String relative = relativePath.toString().replace(File.separatorChar, '/');
+                getLogger().lifecycle("[SKIP] {}", relative);
             }
         }
         return toConvert;
@@ -813,12 +842,14 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     private void logLifecycleFailure(final Throwable throwable) {
         final List<String> parseMessages = findParseFailureMessages(throwable);
         if (!parseMessages.isEmpty()) {
-            for (String parseMessage : parseMessages) {
-                logParseDiagnostics(parseMessage);
+            if (!suppressStackTrace.get()) {
+                for (String parseMessage : parseMessages) {
+                    logParseDiagnostics(parseMessage);
+                }
             }
             return;
         }
-        final String message = firstNonBlankMessage(throwable);
+        final String message = mostRelevantMessage(throwable);
         if (message != null) {
             getLogger().lifecycle("xmlast failure: {}", message);
         }
@@ -842,16 +873,24 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         return messages;
     }
 
-    private String firstNonBlankMessage(final Throwable throwable) {
+
+    private String mostRelevantMessage(final Throwable throwable) {
+        String fallback = null;
         Throwable current = throwable;
         while (current != null) {
             final String message = current.getMessage();
             if (message != null && !message.isBlank()) {
-                return message;
+                if (fallback == null) {
+                    fallback = message;
+                }
+                if (!"Dynamic ANTLR conversion failed".equals(message)
+                        && !"xmlast conversion failed".equals(message)) {
+                    return message;
+                }
             }
             current = current.getCause();
         }
-        return null;
+        return fallback;
     }
 
     private void logParseDiagnostics(final String parseMessage) {

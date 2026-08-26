@@ -124,6 +124,17 @@ tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
 }
 ```
 
+### 5) Profile grammar decisions (ambiguity/backtracking hotspots)
+
+```groovy
+tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+    enableDecisionProfiling.set(true)
+    decisionProfileTopN.set(15)
+}
+```
+
+When enabled, logs print `[PROFILE]` lines with top parser decisions by `timeInPrediction`.
+
 ## Output Behavior
 
 For each selected source file, one XML file is created in the destination tree with relative path preserved.
@@ -146,6 +157,9 @@ Most-used properties:
 - `executionModel`: `SEQUENTIAL`, `PLATFORM_THREADS`, `VIRTUAL_THREADS`
 - `parallelism`: worker cap for threaded models
 - `compression`: compact rule-chain output
+- `enableLineCountMetrics`: include per-file line counts in logs (disable for max throughput)
+- `enableDecisionProfiling`: emit top parser decisions by prediction time
+- `decisionProfileTopN`: number of decisions printed in profile summary
 - `catalogFile` / `catalogGrammar`: optional catalog-driven config
 - `runtimeClasspath`: where parser/runtime classes are loaded from
 

@@ -37,6 +37,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.concurrent.CompletionService;
@@ -107,37 +108,7 @@ public final class DynamicAntlrXmlAstConverter {
             final boolean compression,
             final boolean continueOnError,
             final Consumer<String> outcomeLogger) {
-        // Guard: Null checks
-        java.util.Objects.requireNonNull(sourceRoot, "sourceRoot cannot be null");
-        java.util.Objects.requireNonNull(sourceFiles, "sourceFiles cannot be null");
-        java.util.Objects.requireNonNull(destinationRoot, "destinationRoot cannot be null");
-        java.util.Objects.requireNonNull(targetExtension, "targetExtension cannot be null");
-        java.util.Objects.requireNonNull(classLoader, "classLoader cannot be null");
-        java.util.Objects.requireNonNull(lexerClassName, "lexerClassName cannot be null");
-        java.util.Objects.requireNonNull(parserClassName, "parserClassName cannot be null");
-        java.util.Objects.requireNonNull(startRule, "startRule cannot be null");
-
-        // Guard: Empty/blank checks
-        if (sourceFiles.isEmpty()) {
-            throw new IllegalArgumentException("sourceFiles cannot be empty");
-        }
-        if (startRule.isBlank()) {
-            throw new IllegalArgumentException("startRule cannot be blank (e.g., 'script')");
-        }
-        if (targetExtension.isBlank()) {
-            throw new IllegalArgumentException("targetExtension cannot be blank (e.g., '.xml')");
-        }
-        if (lexerClassName.isBlank()) {
-            throw new IllegalArgumentException("lexerClassName cannot be blank");
-        }
-        if (parserClassName.isBlank()) {
-            throw new IllegalArgumentException("parserClassName cannot be blank");
-        }
-
-        // Guard: Directory checks
-        if (!sourceRoot.isDirectory()) {
-            throw new IllegalArgumentException("sourceRoot must be an existing directory: " + sourceRoot);
-        }
+        validateCommonInputs(sourceRoot, sourceFiles, destinationRoot, targetExtension, classLoader, lexerClassName, parserClassName, startRule);
 
         convertFileTreeWithStats(
                 sourceRoot,
@@ -188,6 +159,8 @@ public final class DynamicAntlrXmlAstConverter {
             final String executionModelName,
             final int configuredParallelism,
             final Consumer<String> outcomeLogger) {
+        validateCommonInputs(sourceRoot, sourceFiles, destinationRoot, targetExtension, classLoader, lexerClassName, parserClassName, startRule);
+
         // Guard: Parallelism constraints
         if (configuredParallelism < 1) {
             throw new IllegalArgumentException("configuredParallelism must be >= 1, got: " + configuredParallelism);
@@ -236,6 +209,58 @@ public final class DynamicAntlrXmlAstConverter {
             throw ex;
         } catch (Exception ex) {
             throw new GradleException("Dynamic ANTLR conversion failed", ex);
+        }
+    }
+
+    private void validateCommonInputs(
+            final File sourceRoot,
+            final List<File> sourceFiles,
+            final File destinationRoot,
+            final String targetExtension,
+            final ClassLoader classLoader,
+            final String lexerClassName,
+            final String parserClassName,
+            final String startRule) {
+        Objects.requireNonNull(sourceRoot, "sourceRoot cannot be null");
+        Objects.requireNonNull(sourceFiles, "sourceFiles cannot be null");
+        Objects.requireNonNull(destinationRoot, "destinationRoot cannot be null");
+        Objects.requireNonNull(targetExtension, "targetExtension cannot be null");
+        Objects.requireNonNull(classLoader, "classLoader cannot be null");
+        Objects.requireNonNull(lexerClassName, "lexerClassName cannot be null");
+        Objects.requireNonNull(parserClassName, "parserClassName cannot be null");
+        Objects.requireNonNull(startRule, "startRule cannot be null");
+
+        if (!sourceRoot.isDirectory()) {
+            throw new IllegalArgumentException("sourceRoot must be an existing directory: " + sourceRoot);
+        }
+        if (sourceFiles.isEmpty()) {
+            throw new IllegalArgumentException("sourceFiles cannot be empty");
+        }
+        if (startRule.isBlank()) {
+            throw new IllegalArgumentException("startRule cannot be blank (e.g., 'script')");
+        }
+        if (targetExtension.isBlank()) {
+            throw new IllegalArgumentException("targetExtension cannot be blank (e.g., '.xml')");
+        }
+        if (lexerClassName.isBlank()) {
+            throw new IllegalArgumentException("lexerClassName cannot be blank");
+        }
+        if (parserClassName.isBlank()) {
+            throw new IllegalArgumentException("parserClassName cannot be blank");
+        }
+
+        final Path normalizedRoot = sourceRoot.toPath().toAbsolutePath().normalize();
+        for (File sourceFile : sourceFiles) {
+            if (sourceFile == null) {
+                throw new IllegalArgumentException("sourceFiles cannot contain null elements");
+            }
+            if (!sourceFile.isFile()) {
+                throw new IllegalArgumentException("sourceFiles entries must be existing files: " + sourceFile);
+            }
+            final Path normalizedSource = sourceFile.toPath().toAbsolutePath().normalize();
+            if (!normalizedSource.startsWith(normalizedRoot)) {
+                throw new IllegalArgumentException("sourceFiles entry is outside sourceRoot: " + sourceFile);
+            }
         }
     }
 

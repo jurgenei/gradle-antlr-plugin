@@ -73,6 +73,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     private final Property<Boolean> aggressiveGc;
     private final Property<Integer> gcEveryFiles;
     private final Property<Integer> gcHeapThresholdPercent;
+    private final Property<Boolean> enableLineCountMetrics;
+    private final Property<Boolean> enableDecisionProfiling;
+    private final Property<Integer> decisionProfileTopN;
     private final ConfigurableFileCollection runtimeClasspath;
 
     /**
@@ -106,6 +109,9 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         aggressiveGc = objects.property(Boolean.class).convention(false);
         gcEveryFiles = objects.property(Integer.class).convention(25);
         gcHeapThresholdPercent = objects.property(Integer.class).convention(80);
+        enableLineCountMetrics = objects.property(Boolean.class).convention(true);
+        enableDecisionProfiling = objects.property(Boolean.class).convention(false);
+        decisionProfileTopN = objects.property(Integer.class).convention(10);
         runtimeClasspath = objects.fileCollection();
 
         sourceDirectory.convention(getProject().getLayout().getProjectDirectory().dir("src/main/sql"));
@@ -373,6 +379,40 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     }
 
     /**
+     * Enables per-file line-count metrics in success logs.
+     *
+     * <p>Disable for large workloads to avoid extra file reread after parsing.</p>
+     *
+     * @return line-count metrics flag property.
+     */
+    @Input
+    public Property<Boolean> getEnableLineCountMetrics() {
+        return enableLineCountMetrics;
+    }
+
+    /**
+     * Enables ANTLR parser decision profiling to detect costly decisions and ambiguity hotspots.
+     *
+     * <p>When enabled, conversion logs include top decisions ranked by {@code timeInPrediction}.</p>
+     *
+     * @return decision profiling flag property.
+     */
+    @Input
+    public Property<Boolean> getEnableDecisionProfiling() {
+        return enableDecisionProfiling;
+    }
+
+    /**
+     * Number of parser decisions printed in the profiling summary when decision profiling is enabled.
+     *
+     * @return top-N decision profile limit property.
+     */
+    @Input
+    public Property<Integer> getDecisionProfileTopN() {
+        return decisionProfileTopN;
+    }
+
+    /**
      * Runtime classpath used to load converter classes and dependencies.
      *
      * @return classpath file collection.
@@ -449,6 +489,10 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         final String previousGcEnabled = System.getProperty("xmlast.gc.enabled");
         final String previousGcEveryFiles = System.getProperty("xmlast.gc.every.files");
         final String previousGcHeapThresholdPercent = System.getProperty("xmlast.gc.heap.threshold.percent");
+        final String previousLineCountMetricsEnabled = System.getProperty("xmlast.metrics.linecount.enabled");
+        final String previousDecisionProfileEnabled = System.getProperty("xmlast.decision.profile.enabled");
+        final String previousDecisionProfileTopN = System.getProperty("xmlast.decision.profile.top.n");
+        System.setProperty("xmlast.metrics.linecount.enabled", Boolean.toString(enableLineCountMetrics.get()));
         if (aggressiveGc.get()) {
             final int gcFrequency = Math.max(1, gcEveryFiles.get());
             final int heapThreshold = Math.clamp(gcHeapThresholdPercent.get(), 1, 100);
@@ -456,6 +500,12 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             System.setProperty("xmlast.gc.every.files", Integer.toString(gcFrequency));
             System.setProperty("xmlast.gc.heap.threshold.percent", Integer.toString(heapThreshold));
             getLogger().lifecycle("xmlast aggressive GC enabled (every {} file(s), heap >= {}%)", gcFrequency, heapThreshold);
+        }
+        if (enableDecisionProfiling.get()) {
+            final int topN = Math.max(1, decisionProfileTopN.get());
+            System.setProperty("xmlast.decision.profile.enabled", "true");
+            System.setProperty("xmlast.decision.profile.top.n", Integer.toString(topN));
+            getLogger().lifecycle("xmlast decision profiling enabled (top {} decisions)", topN);
         }
 
         try {
@@ -500,6 +550,21 @@ public abstract class XmlAstGradleTask extends DefaultTask {
                 System.clearProperty("xmlast.gc.heap.threshold.percent");
             } else {
                 System.setProperty("xmlast.gc.heap.threshold.percent", previousGcHeapThresholdPercent);
+            }
+            if (previousLineCountMetricsEnabled == null) {
+                System.clearProperty("xmlast.metrics.linecount.enabled");
+            } else {
+                System.setProperty("xmlast.metrics.linecount.enabled", previousLineCountMetricsEnabled);
+            }
+            if (previousDecisionProfileEnabled == null) {
+                System.clearProperty("xmlast.decision.profile.enabled");
+            } else {
+                System.setProperty("xmlast.decision.profile.enabled", previousDecisionProfileEnabled);
+            }
+            if (previousDecisionProfileTopN == null) {
+                System.clearProperty("xmlast.decision.profile.top.n");
+            } else {
+                System.setProperty("xmlast.decision.profile.top.n", previousDecisionProfileTopN);
             }
 
             if (conversionStats == null) {

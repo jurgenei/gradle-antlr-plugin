@@ -10,6 +10,8 @@ import org.antlr.v4.runtime.Parser;
 import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.Recognizer;
 import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.atn.DecisionInfo;
+import org.antlr.v4.runtime.atn.ParseInfo;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.RuleNode;
 import org.antlr.v4.runtime.tree.TerminalNode;
@@ -31,9 +33,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
@@ -62,8 +67,12 @@ public final class DynamicAntlrXmlAstConverter {
     private static final String GC_ENABLED_PROPERTY = "xmlast.gc.enabled";
     private static final String GC_EVERY_FILES_PROPERTY = "xmlast.gc.every.files";
     private static final String GC_HEAP_THRESHOLD_PERCENT_PROPERTY = "xmlast.gc.heap.threshold.percent";
+    private static final String LINE_COUNT_METRICS_ENABLED_PROPERTY = "xmlast.metrics.linecount.enabled";
+    private static final String DECISION_PROFILE_ENABLED_PROPERTY = "xmlast.decision.profile.enabled";
+    private static final String DECISION_PROFILE_TOP_N_PROPERTY = "xmlast.decision.profile.top.n";
 
     private final AtomicInteger completedFilesCounter = new AtomicInteger();
+    private final Map<Integer, DecisionProfileAggregate> decisionProfileAggregates = new ConcurrentHashMap<>();
 
     /**
      * Creates a converter instance.
@@ -99,37 +108,7 @@ public final class DynamicAntlrXmlAstConverter {
             final boolean compression,
             final boolean continueOnError,
             final Consumer<String> outcomeLogger) {
-        // Guard: Null checks
-        java.util.Objects.requireNonNull(sourceRoot, "sourceRoot cannot be null");
-        java.util.Objects.requireNonNull(sourceFiles, "sourceFiles cannot be null");
-        java.util.Objects.requireNonNull(destinationRoot, "destinationRoot cannot be null");
-        java.util.Objects.requireNonNull(targetExtension, "targetExtension cannot be null");
-        java.util.Objects.requireNonNull(classLoader, "classLoader cannot be null");
-        java.util.Objects.requireNonNull(lexerClassName, "lexerClassName cannot be null");
-        java.util.Objects.requireNonNull(parserClassName, "parserClassName cannot be null");
-        java.util.Objects.requireNonNull(startRule, "startRule cannot be null");
-
-        // Guard: Empty/blank checks
-        if (sourceFiles.isEmpty()) {
-            throw new IllegalArgumentException("sourceFiles cannot be empty");
-        }
-        if (startRule.isBlank()) {
-            throw new IllegalArgumentException("startRule cannot be blank (e.g., 'script')");
-        }
-        if (targetExtension.isBlank()) {
-            throw new IllegalArgumentException("targetExtension cannot be blank (e.g., '.xml')");
-        }
-        if (lexerClassName.isBlank()) {
-            throw new IllegalArgumentException("lexerClassName cannot be blank");
-        }
-        if (parserClassName.isBlank()) {
-            throw new IllegalArgumentException("parserClassName cannot be blank");
-        }
-
-        // Guard: Directory checks
-        if (!sourceRoot.isDirectory()) {
-            throw new IllegalArgumentException("sourceRoot must be an existing directory: " + sourceRoot);
-        }
+        validateCommonInputs(sourceRoot, sourceFiles, destinationRoot, targetExtension, classLoader, lexerClassName, parserClassName, startRule);
 
         convertFileTreeWithStats(
                 sourceRoot,
@@ -180,6 +159,8 @@ public final class DynamicAntlrXmlAstConverter {
             final String executionModelName,
             final int configuredParallelism,
             final Consumer<String> outcomeLogger) {
+        validateCommonInputs(sourceRoot, sourceFiles, destinationRoot, targetExtension, classLoader, lexerClassName, parserClassName, startRule);
+
         // Guard: Parallelism constraints
         if (configuredParallelism < 1) {
             throw new IllegalArgumentException("configuredParallelism must be >= 1, got: " + configuredParallelism);
@@ -204,7 +185,6 @@ public final class DynamicAntlrXmlAstConverter {
             Files.createDirectories(destinationRoot.toPath());
 
             try (RuntimeParserBinding binding = prepareParserBinding(classLoader, lexerClassName, parserClassName)) {
-                validateParserBinding(binding);
                 final List<ConversionJob> jobs = buildConversionJobs(sourceRoot, sourceFiles, destinationRoot, targetExtension);
                 
                 final ExecutionModel executionModel = parseExecutionModel(executionModelName);
@@ -221,12 +201,66 @@ public final class DynamicAntlrXmlAstConverter {
                         workerLimit,
                         safeOutcomeLogger);
 
+                maybeEmitDecisionProfileReport(safeOutcomeLogger);
+
                 return processOutcomes(outcomes, runStartNanos);
             }
         } catch (ConversionFailedException ex) {
             throw ex;
         } catch (Exception ex) {
             throw new GradleException("Dynamic ANTLR conversion failed", ex);
+        }
+    }
+
+    private void validateCommonInputs(
+            final File sourceRoot,
+            final List<File> sourceFiles,
+            final File destinationRoot,
+            final String targetExtension,
+            final ClassLoader classLoader,
+            final String lexerClassName,
+            final String parserClassName,
+            final String startRule) {
+        Objects.requireNonNull(sourceRoot, "sourceRoot cannot be null");
+        Objects.requireNonNull(sourceFiles, "sourceFiles cannot be null");
+        Objects.requireNonNull(destinationRoot, "destinationRoot cannot be null");
+        Objects.requireNonNull(targetExtension, "targetExtension cannot be null");
+        Objects.requireNonNull(classLoader, "classLoader cannot be null");
+        Objects.requireNonNull(lexerClassName, "lexerClassName cannot be null");
+        Objects.requireNonNull(parserClassName, "parserClassName cannot be null");
+        Objects.requireNonNull(startRule, "startRule cannot be null");
+
+        if (!sourceRoot.isDirectory()) {
+            throw new IllegalArgumentException("sourceRoot must be an existing directory: " + sourceRoot);
+        }
+        if (sourceFiles.isEmpty()) {
+            throw new IllegalArgumentException("sourceFiles cannot be empty");
+        }
+        if (startRule.isBlank()) {
+            throw new IllegalArgumentException("startRule cannot be blank (e.g., 'script')");
+        }
+        if (targetExtension.isBlank()) {
+            throw new IllegalArgumentException("targetExtension cannot be blank (e.g., '.xml')");
+        }
+        if (lexerClassName.isBlank()) {
+            throw new IllegalArgumentException("lexerClassName cannot be blank");
+        }
+        if (parserClassName.isBlank()) {
+            throw new IllegalArgumentException("parserClassName cannot be blank");
+        }
+
+        final Path normalizedRoot = sourceRoot.toPath().toAbsolutePath().normalize();
+        for (File sourceFile : sourceFiles) {
+            if (sourceFile == null) {
+                throw new IllegalArgumentException("sourceFiles cannot contain null elements");
+            }
+            if (!sourceFile.isFile()) {
+                throw new IllegalArgumentException("sourceFiles entries must be existing files: " + sourceFile);
+            }
+            final Path normalizedSource = sourceFile.toPath().toAbsolutePath().normalize();
+            if (!normalizedSource.startsWith(normalizedRoot)) {
+                throw new IllegalArgumentException("sourceFiles entry is outside sourceRoot: " + sourceFile);
+            }
         }
     }
 
@@ -377,16 +411,10 @@ public final class DynamicAntlrXmlAstConverter {
         final long fileStartNanos = System.nanoTime();
         currentBinding.set(binding);
         try {
-            final String xml = parseToXml(
-                    job.sourceFile().toPath(),
-                    binding.classLoader(),
-                    binding.lexerClassName(),
-                    binding.parserClassName(),
-                    startRule,
-                    compression);
+            final String xml = parseToXml(job.sourceFile().toPath(), binding, startRule, compression);
             Files.writeString(job.output(), xml, StandardCharsets.UTF_8);
             final long durationNanos = System.nanoTime() - fileStartNanos;
-            final long lineCount = countLines(job.sourceFile().toPath());
+            final long lineCount = isLineCountMetricsEnabled() ? countLines(job.sourceFile().toPath()) : 0L;
             final long byteCount = job.sourceFile().length();
             return ConversionOutcome.success(
                     job.index(),
@@ -407,6 +435,10 @@ public final class DynamicAntlrXmlAstConverter {
             binding.clearDFACaches();
             maybeRunAggressiveGc(outcomeLogger);
         }
+    }
+
+    private boolean isLineCountMetricsEnabled() {
+        return Boolean.parseBoolean(System.getProperty(LINE_COUNT_METRICS_ENABLED_PROPERTY, "true"));
     }
 
     private void maybeRunAggressiveGc(final Consumer<String> gcLogger) {
@@ -478,33 +510,6 @@ public final class DynamicAntlrXmlAstConverter {
         }
         final long usedMemory = runtime.totalMemory() - runtime.freeMemory();
         return (int) ((usedMemory * 100L) / maxMemory);
-    }
-
-    private void validateParserBinding(final RuntimeParserBinding binding) {
-        final ClassLoader parserClassLoader = binding.classLoader();
-        final String lexerName = binding.lexerClassName();
-        final String parserName = binding.parserClassName();
-
-        final Class<?> lexerRaw;
-        try {
-            lexerRaw = parserClassLoader.loadClass(lexerName);
-        } catch (ClassNotFoundException ex) {
-            throw new IllegalArgumentException("Lexer class not found on runtimeClasspath: " + lexerName, ex);
-        }
-
-        final Class<?> parserRaw;
-        try {
-            parserRaw = parserClassLoader.loadClass(parserName);
-        } catch (ClassNotFoundException ex) {
-            throw new IllegalArgumentException("Parser class not found on runtimeClasspath: " + parserName, ex);
-        }
-
-        if (!Lexer.class.isAssignableFrom(lexerRaw)) {
-            throw new IllegalArgumentException("Configured lexer class does not extend org.antlr.v4.runtime.Lexer: " + lexerName);
-        }
-        if (!Parser.class.isAssignableFrom(parserRaw)) {
-            throw new IllegalArgumentException("Configured parser class does not extend org.antlr.v4.runtime.Parser: " + parserName);
-        }
     }
 
     private String formatDurationSeconds(final long durationNanos) {
@@ -618,7 +623,7 @@ public final class DynamicAntlrXmlAstConverter {
         final boolean parserFromGrammar = isGrammarSourceSpec(parserSpec);
 
         if (!lexerFromGrammar && !parserFromGrammar) {
-            return new RuntimeParserBinding(classLoader, lexerSpec, parserSpec, null);
+            return createParserBinding(classLoader, lexerSpec, parserSpec, null);
         }
 
         if (lexerFromGrammar != parserFromGrammar) {
@@ -651,7 +656,7 @@ public final class DynamicAntlrXmlAstConverter {
                 new URL[]{classesDir.toUri().toURL()},
                 classLoader);
 
-        return new RuntimeParserBinding(generatedLoader, lexerFqcn, parserFqcn, workspace);
+        return createParserBinding(generatedLoader, lexerFqcn, parserFqcn, workspace);
     }
 
     private boolean isGrammarSourceSpec(final String spec) {
@@ -846,31 +851,20 @@ public final class DynamicAntlrXmlAstConverter {
 
     private String parseToXml(
             final Path sourceFile,
-            final ClassLoader classLoader,
-            final String lexerClassName,
-            final String parserClassName,
+            final RuntimeParserBinding binding,
             final String startRule,
             final boolean compression) throws Exception {
-        final Class<?> lexerRaw = classLoader.loadClass(lexerClassName);
-        final Class<?> parserRaw = classLoader.loadClass(parserClassName);
-
-        if (!Lexer.class.isAssignableFrom(lexerRaw)) {
-            throw new IllegalArgumentException("Class is not an ANTLR lexer: " + lexerClassName);
-        }
-        if (!Parser.class.isAssignableFrom(parserRaw)) {
-            throw new IllegalArgumentException("Class is not an ANTLR parser: " + parserClassName);
-        }
-
-        @SuppressWarnings("unchecked") final Class<? extends Lexer> lexerClass = (Class<? extends Lexer>) lexerRaw;
-        @SuppressWarnings("unchecked") final Class<? extends Parser> parserClass = (Class<? extends Parser>) parserRaw;
-
-        final Constructor<? extends Lexer> lexerCtor = lexerClass.getConstructor(org.antlr.v4.runtime.CharStream.class);
+        final Constructor<? extends Lexer> lexerCtor = binding.lexerCtor();
         final Lexer lexer = lexerCtor.newInstance(CharStreams.fromPath(sourceFile, StandardCharsets.UTF_8));
 
         final CommonTokenStream tokenStream = new CommonTokenStream(lexer);
 
-        final Constructor<? extends Parser> parserCtor = parserClass.getConstructor(org.antlr.v4.runtime.TokenStream.class);
+        final Constructor<? extends Parser> parserCtor = binding.parserCtor();
         final Parser parser = parserCtor.newInstance(tokenStream);
+        final boolean decisionProfilingEnabled = isDecisionProfilingEnabled();
+        if (decisionProfilingEnabled) {
+            parser.setProfile(true);
+        }
 
         // Cache instances in binding for DFA management (must be done via reflection for private access)
         try {
@@ -886,7 +880,7 @@ public final class DynamicAntlrXmlAstConverter {
         lexer.addErrorListener(errors);
         parser.addErrorListener(errors);
 
-        final Method entryPoint = parserClass.getMethod(startRule);
+        final Method entryPoint = binding.entryPoint(startRule);
         final Object treeObj = entryPoint.invoke(parser);
         if (!(treeObj instanceof ParseTree parseTree)) {
             throw new IllegalStateException("Start rule does not return a ParseTree: " + startRule);
@@ -896,7 +890,80 @@ public final class DynamicAntlrXmlAstConverter {
             throw new GradleException("Parse failed for " + sourceFile + ": " + String.join(" | ", errors.messages));
         }
 
+        if (decisionProfilingEnabled) {
+            collectDecisionProfile(parser);
+        }
+
         return toXml(parser, parseTree, sourceFile.getFileName().toString(), startRule, compression);
+    }
+
+    private boolean isDecisionProfilingEnabled() {
+        return Boolean.parseBoolean(System.getProperty(DECISION_PROFILE_ENABLED_PROPERTY, "false"));
+    }
+
+    private int decisionProfileTopN() {
+        try {
+            return Math.max(1, Integer.parseInt(System.getProperty(DECISION_PROFILE_TOP_N_PROPERTY, "10")));
+        } catch (NumberFormatException ignored) {
+            return 10;
+        }
+    }
+
+    private void collectDecisionProfile(final Parser parser) {
+        final ParseInfo parseInfo = parser.getParseInfo();
+        if (parseInfo == null) {
+            return;
+        }
+        final DecisionInfo[] decisionInfos = parseInfo.getDecisionInfo();
+        final String[] ruleNames = parser.getRuleNames();
+        for (int decision = 0; decision < decisionInfos.length; decision++) {
+            final DecisionInfo info = decisionInfos[decision];
+            if (info.invocations <= 0 && info.timeInPrediction <= 0L) {
+                continue;
+            }
+            final int decisionId = decision;
+            final int ruleIndex = parser.getATN().getDecisionState(decision) == null
+                    ? -1
+                    : parser.getATN().getDecisionState(decision).ruleIndex;
+            final String ruleName = ruleIndex >= 0 && ruleIndex < ruleNames.length
+                    ? ruleNames[ruleIndex]
+                    : "<unknown>";
+
+            final DecisionProfileAggregate aggregate = decisionProfileAggregates.computeIfAbsent(
+                    decisionId,
+                    key -> new DecisionProfileAggregate(decisionId, ruleName));
+            aggregate.merge(info);
+        }
+    }
+
+    private void maybeEmitDecisionProfileReport(final Consumer<String> outcomeLogger) {
+        if (!isDecisionProfilingEnabled() || decisionProfileAggregates.isEmpty()) {
+            return;
+        }
+        final int topN = decisionProfileTopN();
+        final List<DecisionProfileAggregate> top = decisionProfileAggregates.values().stream()
+                .sorted(Comparator.comparingLong(DecisionProfileAggregate::timeInPrediction).reversed())
+                .limit(topN)
+                .toList();
+
+        outcomeLogger.accept(String.format(
+                java.util.Locale.ROOT,
+                "[PROFILE] Top %d parser decisions by timeInPrediction (possible ambiguity/backtracking hotspots):",
+                top.size()));
+        for (DecisionProfileAggregate aggregate : top) {
+            outcomeLogger.accept(String.format(
+                    java.util.Locale.ROOT,
+                    "[PROFILE] decision=%d rule=%s timeMs=%.3f invocations=%d SLL=%d LL=%d ambiguities=%d contextSensitivities=%d predicateEvals=%d",
+                    aggregate.decision(),
+                    aggregate.ruleName(),
+                    aggregate.timeInPrediction() / 1_000_000.0,
+                    aggregate.invocations(),
+                    aggregate.sllTotalLook(),
+                    aggregate.llTotalLook(),
+                    aggregate.ambiguities(),
+                    aggregate.contextSensitivities(),
+                    aggregate.predicateEvals()));
+        }
     }
 
     private final ThreadLocal<RuntimeParserBinding> currentBinding = new ThreadLocal<>();
@@ -1096,6 +1163,10 @@ public final class DynamicAntlrXmlAstConverter {
         private final String lexerClassName;
         private final String parserClassName;
         private final Path workspace;
+        private final Constructor<? extends Lexer> lexerCtor;
+        private final Constructor<? extends Parser> parserCtor;
+        private final Class<? extends Parser> parserType;
+        private final Map<String, Method> parserEntryPoints = new ConcurrentHashMap<>();
         private volatile Lexer cachedLexer;
         private volatile Parser cachedParser;
 
@@ -1103,11 +1174,17 @@ public final class DynamicAntlrXmlAstConverter {
                 final ClassLoader classLoader,
                 final String lexerClassName,
                 final String parserClassName,
-                final Path workspace) {
+                final Path workspace,
+                final Constructor<? extends Lexer> lexerCtor,
+                final Constructor<? extends Parser> parserCtor,
+                final Class<? extends Parser> parserType) {
             this.classLoaderField = classLoader;
             this.lexerClassName = lexerClassName;
             this.parserClassName = parserClassName;
             this.workspace = workspace;
+            this.lexerCtor = lexerCtor;
+            this.parserCtor = parserCtor;
+            this.parserType = parserType;
         }
 
         private ClassLoader classLoader() {
@@ -1120,6 +1197,24 @@ public final class DynamicAntlrXmlAstConverter {
 
         private String parserClassName() {
             return parserClassName;
+        }
+
+        private Constructor<? extends Lexer> lexerCtor() {
+            return lexerCtor;
+        }
+
+        private Constructor<? extends Parser> parserCtor() {
+            return parserCtor;
+        }
+
+        private Method entryPoint(final String startRule) {
+            return parserEntryPoints.computeIfAbsent(startRule, rule -> {
+                try {
+                    return parserType.getMethod(rule);
+                } catch (NoSuchMethodException ex) {
+                    throw new IllegalArgumentException("Parser start rule method not found: " + rule, ex);
+                }
+            });
         }
 
         private void setCachedInstances(final Lexer lexer, final Parser parser) {
@@ -1160,6 +1255,29 @@ public final class DynamicAntlrXmlAstConverter {
         }
     }
 
+    private RuntimeParserBinding createParserBinding(
+            final ClassLoader classLoader,
+            final String lexerClassName,
+            final String parserClassName,
+            final Path workspace) throws Exception {
+        final Class<?> lexerRaw = classLoader.loadClass(lexerClassName);
+        final Class<?> parserRaw = classLoader.loadClass(parserClassName);
+
+        if (!Lexer.class.isAssignableFrom(lexerRaw)) {
+            throw new IllegalArgumentException("Configured lexer class does not extend org.antlr.v4.runtime.Lexer: " + lexerClassName);
+        }
+        if (!Parser.class.isAssignableFrom(parserRaw)) {
+            throw new IllegalArgumentException("Configured parser class does not extend org.antlr.v4.runtime.Parser: " + parserClassName);
+        }
+
+        @SuppressWarnings("unchecked") final Class<? extends Lexer> lexerType = (Class<? extends Lexer>) lexerRaw;
+        @SuppressWarnings("unchecked") final Class<? extends Parser> parserType = (Class<? extends Parser>) parserRaw;
+        final Constructor<? extends Lexer> lexerCtor = lexerType.getConstructor(org.antlr.v4.runtime.CharStream.class);
+        final Constructor<? extends Parser> parserCtor = parserType.getConstructor(org.antlr.v4.runtime.TokenStream.class);
+
+        return new RuntimeParserBinding(classLoader, lexerClassName, parserClassName, workspace, lexerCtor, parserCtor, parserType);
+    }
+
     private static void deleteRecursively(final Path root) {
         try (Stream<Path> stream = Files.walk(root)) {
             stream.sorted((a, b) -> b.getNameCount() - a.getNameCount())
@@ -1189,6 +1307,69 @@ public final class DynamicAntlrXmlAstConverter {
                 final RecognitionException e) {
             errorCount++;
             messages.add(line + ":" + charPositionInLine + " " + msg);
+        }
+    }
+
+    private static final class DecisionProfileAggregate {
+        private final int decision;
+        private final String ruleName;
+        private long timeInPrediction;
+        private long invocations;
+        private long sllTotalLook;
+        private long llTotalLook;
+        private long ambiguities;
+        private long contextSensitivities;
+        private long predicateEvals;
+
+        private DecisionProfileAggregate(final int decision, final String ruleName) {
+            this.decision = decision;
+            this.ruleName = ruleName;
+        }
+
+        private synchronized void merge(final DecisionInfo info) {
+            timeInPrediction += info.timeInPrediction;
+            invocations += info.invocations;
+            sllTotalLook += info.SLL_TotalLook;
+            llTotalLook += info.LL_TotalLook;
+            ambiguities += info.ambiguities == null ? 0 : info.ambiguities.size();
+            contextSensitivities += info.contextSensitivities == null ? 0 : info.contextSensitivities.size();
+            predicateEvals += info.predicateEvals == null ? 0 : info.predicateEvals.size();
+        }
+
+        private int decision() {
+            return decision;
+        }
+
+        private String ruleName() {
+            return ruleName;
+        }
+
+        private synchronized long timeInPrediction() {
+            return timeInPrediction;
+        }
+
+        private synchronized long invocations() {
+            return invocations;
+        }
+
+        private synchronized long sllTotalLook() {
+            return sllTotalLook;
+        }
+
+        private synchronized long llTotalLook() {
+            return llTotalLook;
+        }
+
+        private synchronized long ambiguities() {
+            return ambiguities;
+        }
+
+        private synchronized long contextSensitivities() {
+            return contextSensitivities;
+        }
+
+        private synchronized long predicateEvals() {
+            return predicateEvals;
         }
     }
 

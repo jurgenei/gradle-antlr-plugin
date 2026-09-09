@@ -13,6 +13,11 @@ plugins {
 group = 'name.jurgenei.gradle'
 version = '0.1.3'
 
+ext {
+    spotbugsEngineVersion = '4.8.6'
+    findSecBugsVersion = '1.13.0'
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
@@ -32,6 +37,7 @@ dependencies {
     testImplementation 'org.antlr:antlr4-runtime:4.13.1'
     testImplementation gradleTestKit()
     testImplementation 'junit:junit:4.13.2'
+    spotbugsPlugins "com.h3xstream.findsecbugs:findsecbugs-plugin:${findSecBugsVersion}"
 }
 
 gradlePlugin {
@@ -114,10 +120,18 @@ dependencyCheck {
 
 // SpotBugs configuration
 spotbugs {
+    toolVersion = spotbugsEngineVersion
     ignoreFailures = false
     effort = com.github.spotbugs.snom.Effort.valueOf('DEFAULT')
     reportLevel = com.github.spotbugs.snom.Confidence.valueOf('HIGH')
     excludeFilter = file('spotbugs-exclude.xml')
+}
+
+tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
+    reports {
+        html.required = true
+        xml.required = false
+    }
 }
 
 tasks.named('spotbugsMain') {

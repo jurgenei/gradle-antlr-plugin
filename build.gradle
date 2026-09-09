@@ -156,6 +156,11 @@ tasks.withType(Test).configureEach {
     useJUnit()
 }
 
+tasks.withType(Javadoc).configureEach {
+    // Internal Gradle plugin API keeps concise docs; disable doclint warning noise.
+    options.addStringOption('Xdoclint:none', '-quiet')
+}
+
 jacoco {
     toolVersion = '0.8.12'
 }

@@ -54,6 +54,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     private final DirectoryProperty destinationDirectory;
     private final Property<String> grammar;
     private final Property<String> targetExtension;
+    private final Property<String> sexprFormat;
     private final Property<Integer> parallelism;
     private final Property<String> executionModel;
     private final ListProperty<String> includes;
@@ -90,6 +91,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         destinationDirectory = objects.directoryProperty();
         grammar = objects.property(String.class).convention(GrammarConstants.DEFAULT_GRAMMAR);
         targetExtension = objects.property(String.class).convention(GrammarConstants.DEFAULT_FILE_EXTENSION);
+        sexprFormat = objects.property(String.class).convention("compact");
         parallelism = objects.property(Integer.class).convention(GrammarConstants.DEFAULT_PARALLELISM);
         executionModel = objects.property(String.class).convention(GrammarConstants.EXECUTION_MODEL_SEQUENTIAL);
         includes = objects.listProperty(String.class).convention(List.of(GrammarConstants.DEFAULT_INCLUDE_PATTERN));
@@ -159,6 +161,18 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     @Input
     public Property<String> getTargetExtension() {
         return targetExtension;
+    }
+
+    /**
+     * S-expression output format used when {@code targetExtension} is {@code .sexpr}.
+     *
+     * <p>Supported values: {@code compact} (default), {@code beautified}.</p>
+     *
+     * @return S-expression output format property.
+     */
+    @Input
+    public Property<String> getSexprFormat() {
+        return sexprFormat;
     }
 
     /**
@@ -446,6 +460,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         // Validate and resolve all configurations upfront
         final ResolvedParserConfig resolvedConfig = resolveEffectiveConfig();
         final String extension = validateAndGetExtension();
+        final String sexprFormatValue = validateAndGetSexprFormat();
         final int parallelismValue = validateAndGetParallelism();
         final String executionModelValue = validateAndGetExecutionModel();
 
@@ -460,7 +475,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         }
 
         // Execute conversion and handle results
-        performConversion(sourceDir, destinationDir, resolvedConfig, extension, parallelismValue, 
+        performConversion(sourceDir, destinationDir, resolvedConfig, extension, sexprFormatValue, parallelismValue,
                          executionModelValue, jobs, runStartNanos);
     }
 
@@ -473,6 +488,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             final File destinationDir,
             final ResolvedParserConfig resolvedConfig,
             final String extension,
+            final String sexprFormatValue,
             final int parallelismValue,
             final String executionModelValue,
             final List<File> jobs,
@@ -521,6 +537,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
                         resolvedConfig.startRule(),
                         compression.get(),
                         continueOnError.get(),
+                        sexprFormatValue,
                         executionModelValue,
                         parallelismValue,
                         line -> getLogger().lifecycle(line));
@@ -628,6 +645,18 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             throw new GradleException("targetExtension is not configured");
         }
         return extension;
+    }
+
+    /**
+     * Validates configured S-expression output format.
+     */
+    private String validateAndGetSexprFormat() {
+        final String configured = sexprFormat.getOrElse("compact");
+        final String normalized = configured.trim().toLowerCase(Locale.ROOT);
+        if (!"compact".equals(normalized) && !"beautified".equals(normalized)) {
+            throw new GradleException("sexprFormat must be 'compact' or 'beautified', got: " + configured);
+        }
+        return normalized;
     }
 
     /**

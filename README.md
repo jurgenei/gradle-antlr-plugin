@@ -141,10 +141,23 @@ When enabled, logs print `[PROFILE]` lines with top parser decisions by `timeInP
 
 ## Output Behavior
 
-For each selected source file, one XML file is created in the destination tree with relative path preserved.
+For each selected source file, one AST file is created in destination tree with relative path preserved.
+
+- `targetExtension.set('.xml')` -> XML AST output
+- `targetExtension.set('.sexpr')` (or `.SEXPR`) -> canonical S-expression AST output
+- When using `.sexpr`, `sexprFormat` controls rendering: `compact` (default) or `beautified`
 
 - Input: `src/main/sql/demo/query.sql`
 - Output: `build/xmlast/demo/query.xml`
+
+S-expression output example:
+
+```groovy
+tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+    targetExtension.set('.sexpr')
+    sexprFormat.set('beautified')
+}
+```
 
 ## Configuration Reference (`XmlAstGradleTask`)
 
@@ -156,6 +169,7 @@ Most-used properties:
 - `parserClassName` / `lexerClassName`: parser coordinates
 - `startRule`: parser entry point
 - `targetExtension`: usually `.xml`
+- `sexprFormat`: `compact` or `beautified` when target extension is `.sexpr`
 - `force`: bypass timestamp checks
 - `continueOnError`, `failOnError`, `failOnTransformationError`, `suppressStackTrace`
 - `executionModel`: `SEQUENTIAL`, `PLATFORM_THREADS`, `VIRTUAL_THREADS`

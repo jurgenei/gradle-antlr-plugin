@@ -149,6 +149,138 @@ public class XmlAstPluginFunctionalTest {
     }
 
     @Test
+    public void convertsSqlToSexprUsingDynamicallyLoadedParserAndLexer() throws Exception {
+        final File projectDir = temporaryFolder.newFolder("functional-dynamic-parser-conversion-sexpr");
+        writeSettings(projectDir);
+        writeBuildFile(projectDir, """
+                plugins {
+                    id 'java'
+                    id 'antlr'
+                    id 'name.jurgenei.gradle.antlr'
+                }
+
+                repositories {
+                    mavenCentral()
+                }
+
+                dependencies {
+                    antlr 'org.antlr:antlr4:4.13.1'
+                    implementation 'org.antlr:antlr4-runtime:4.13.1'
+                }
+
+                generateGrammarSource {
+                    arguments += ['-package', 'e2e']
+                }
+
+                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                    sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
+                    destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
+                    parserClassName.set('e2e.MiniParser')
+                    lexerClassName.set('e2e.MiniLexer')
+                    startRule.set('script')
+                    targetExtension.set('.sexpr')
+                    sexprFormat.set('beautified')
+                }
+                """);
+
+        writeFile(projectDir, "src/main/antlr/MiniLexer.g4", """
+                lexer grammar MiniLexer;
+
+                SELECT: 'SELECT';
+                FROM: 'FROM';
+                STAR: '*';
+                SEMI: ';';
+                IDENTIFIER: [a-zA-Z_] [a-zA-Z_0-9]*;
+                WS: [ \\t\\r\\n]+ -> skip;
+                """);
+
+        writeFile(projectDir, "src/main/antlr/MiniParser.g4", """
+                parser grammar MiniParser;
+                options { tokenVocab=MiniLexer; }
+
+                script: SELECT STAR FROM IDENTIFIER SEMI EOF;
+                """);
+
+        writeFile(projectDir, "src/main/sql/sample.sql", "SELECT * FROM employees;");
+
+        final BuildResult result = run(projectDir, "xmlast", "--stacktrace");
+        Assert.assertTrue("Expected xmlast task success", result.getOutput().contains("BUILD SUCCESSFUL"));
+
+        final Path output = projectDir.toPath().resolve("build/xmlast/sample.sexpr");
+        Assert.assertTrue("Expected generated S-expression file", Files.exists(output));
+        final String sexpr = Files.readString(output, StandardCharsets.UTF_8);
+        Assert.assertTrue("Expected canonical S-expression document root", sexpr.startsWith("(."));
+        Assert.assertTrue("Expected beautified output line breaks", sexpr.contains(System.lineSeparator()));
+        Assert.assertTrue("Expected ast root node", sexpr.contains("(ast"));
+        Assert.assertTrue("Expected script rule", sexpr.contains("name \"script\""));
+        Assert.assertTrue("Expected SELECT token", sexpr.contains("SELECT"));
+    }
+
+    @Test
+    public void acceptsUppercaseSexprTargetExtension() throws Exception {
+        final File projectDir = temporaryFolder.newFolder("functional-dynamic-parser-conversion-uppercase-sexpr");
+        writeSettings(projectDir);
+        writeBuildFile(projectDir, """
+                plugins {
+                    id 'java'
+                    id 'antlr'
+                    id 'name.jurgenei.gradle.antlr'
+                }
+
+                repositories {
+                    mavenCentral()
+                }
+
+                dependencies {
+                    antlr 'org.antlr:antlr4:4.13.1'
+                    implementation 'org.antlr:antlr4-runtime:4.13.1'
+                }
+
+                generateGrammarSource {
+                    arguments += ['-package', 'e2e']
+                }
+
+                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                    sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
+                    destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
+                    parserClassName.set('e2e.MiniParser')
+                    lexerClassName.set('e2e.MiniLexer')
+                    startRule.set('script')
+                    targetExtension.set('.SEXPR')
+                }
+                """);
+
+        writeFile(projectDir, "src/main/antlr/MiniLexer.g4", """
+                lexer grammar MiniLexer;
+
+                SELECT: 'SELECT';
+                FROM: 'FROM';
+                STAR: '*';
+                SEMI: ';';
+                IDENTIFIER: [a-zA-Z_] [a-zA-Z_0-9]*;
+                WS: [ \\t\\r\\n]+ -> skip;
+                """);
+
+        writeFile(projectDir, "src/main/antlr/MiniParser.g4", """
+                parser grammar MiniParser;
+                options { tokenVocab=MiniLexer; }
+
+                script: SELECT STAR FROM IDENTIFIER SEMI EOF;
+                """);
+
+        writeFile(projectDir, "src/main/sql/sample.sql", "SELECT * FROM employees;");
+
+        final BuildResult result = run(projectDir, "xmlast", "--stacktrace");
+        Assert.assertTrue("Expected xmlast task success", result.getOutput().contains("BUILD SUCCESSFUL"));
+
+        final Path output = projectDir.toPath().resolve("build/xmlast/sample.SEXPR");
+        Assert.assertTrue("Expected generated uppercase-extension S-expression file", Files.exists(output));
+        final String sexpr = Files.readString(output, StandardCharsets.UTF_8);
+        Assert.assertTrue("Expected canonical S-expression document root", sexpr.startsWith("(."));
+        Assert.assertTrue("Expected ast root node", sexpr.contains("(ast"));
+    }
+
+    @Test
     public void failsXmlAstConversionForInvalidSqlWithParseError() throws Exception {
         final File projectDir = temporaryFolder.newFolder("functional-dynamic-parser-invalid-sql");
         writeSettings(projectDir);

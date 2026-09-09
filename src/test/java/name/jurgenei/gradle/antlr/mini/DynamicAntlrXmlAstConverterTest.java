@@ -61,6 +61,34 @@ public class DynamicAntlrXmlAstConverterTest {
     }
 
     @Test
+    public void convertsValidFixturesToSexprAstFilesWhenTargetExtensionIsSexpr() throws Exception {
+        final File outputDir = temporaryFolder.newFolder("sexpr-ast-out");
+        final List<File> inputs = listSqlFiles(VALID_DIR).stream().map(Path::toFile).toList();
+
+        new DynamicAntlrXmlAstConverter().convertFileTree(
+                VALID_DIR.toFile(),
+                inputs,
+                outputDir,
+                ".sexpr",
+                MiniLexer.class.getClassLoader(),
+                MiniLexer.class.getName(),
+                MiniParser.class.getName(),
+                "script",
+                false,
+                false,
+                "beautified",
+                null);
+
+        final Path sexprPath = outputDir.toPath().resolve("01_select_star.sexpr");
+        Assert.assertTrue("Expected S-expression output", Files.exists(sexprPath));
+        final String sexpr = Files.readString(sexprPath, StandardCharsets.UTF_8);
+        Assert.assertTrue("Expected canonical S-expression document", sexpr.startsWith("(."));
+        Assert.assertTrue("Expected beautified line breaks", sexpr.contains(System.lineSeparator()));
+        Assert.assertTrue("Expected ast root node", sexpr.contains("(ast"));
+        Assert.assertTrue("Expected entry rule attribute", sexpr.contains("entryRule \"script\""));
+    }
+
+    @Test
     public void emitsPathIndexWhenCompressionEnabled() throws Exception {
         final File outputDir = temporaryFolder.newFolder("xml-ast-compressed");
         final List<File> inputs = List.of(VALID_DIR.resolve("01_select_star.sql").toFile());
@@ -83,6 +111,31 @@ public class DynamicAntlrXmlAstConverterTest {
         final String xml = Files.readString(xmlPath, StandardCharsets.UTF_8);
         Assert.assertTrue("Expected pathIndex section", xml.contains("<pathIndex>"));
         Assert.assertTrue("Expected compressed path id attribute", xml.contains("pathId=\""));
+    }
+
+    @Test
+    public void emitsPathIndexInSexprWhenCompressionEnabled() throws Exception {
+        final File outputDir = temporaryFolder.newFolder("sexpr-ast-compressed");
+        final List<File> inputs = List.of(VALID_DIR.resolve("01_select_star.sql").toFile());
+
+        new DynamicAntlrXmlAstConverter().convertFileTree(
+                VALID_DIR.toFile(),
+                inputs,
+                outputDir,
+                ".sexpr",
+                MiniLexer.class.getClassLoader(),
+                MiniLexer.class.getName(),
+                MiniParser.class.getName(),
+                "script",
+                true,
+                false,
+                null);
+
+        final Path sexprPath = outputDir.toPath().resolve("01_select_star.sexpr");
+        Assert.assertTrue("Expected S-expression output", Files.exists(sexprPath));
+        final String sexpr = Files.readString(sexprPath, StandardCharsets.UTF_8);
+        Assert.assertTrue("Expected pathIndex node", sexpr.contains("(pathIndex"));
+        Assert.assertTrue("Expected compressed path id attribute", sexpr.contains("pathId \""));
     }
 
     @Test
@@ -199,6 +252,30 @@ public class DynamicAntlrXmlAstConverterTest {
                         null));
 
         Assert.assertTrue(ex.getMessage().contains("startRule cannot be blank"));
+    }
+
+    @Test
+    public void rejectsUnsupportedSexprFormat() throws Exception {
+        final File outputDir = temporaryFolder.newFolder("xml-ast-invalid-sexpr-format");
+        final List<File> inputs = List.of(VALID_DIR.resolve("01_select_star.sql").toFile());
+
+        final IllegalArgumentException ex = Assert.assertThrows(
+                IllegalArgumentException.class,
+                () -> new DynamicAntlrXmlAstConverter().convertFileTree(
+                        VALID_DIR.toFile(),
+                        inputs,
+                        outputDir,
+                        ".sexpr",
+                        MiniLexer.class.getClassLoader(),
+                        MiniLexer.class.getName(),
+                        MiniParser.class.getName(),
+                        "script",
+                        false,
+                        false,
+                        "pretty",
+                        null));
+
+        Assert.assertTrue(ex.getMessage().contains("Unsupported sexprFormat"));
     }
 
     @Test

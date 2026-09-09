@@ -2,6 +2,7 @@ package name.jurgenei.gradle.antlr;
 
 import name.jurgenei.gradle.antlr.constants.GrammarConstants;
 import name.jurgenei.gradle.antlr.constants.TimeConstants;
+import name.jurgenei.xml.sexpr.SExpressionSerializer;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -20,9 +21,12 @@ import org.gradle.api.GradleException;
 import javax.tools.JavaCompiler;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
+import javax.xml.parsers.SAXParserFactory;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.net.URI;
@@ -50,6 +54,8 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.stream.Stream;
+import org.xml.sax.InputSource;
+import org.xml.sax.XMLReader;
 
 /**
  * Converts SQL input files to XML AST output using dynamically loaded ANTLR lexer/parser classes.
@@ -70,6 +76,10 @@ public final class DynamicAntlrXmlAstConverter {
     private static final String LINE_COUNT_METRICS_ENABLED_PROPERTY = "xmlast.metrics.linecount.enabled";
     private static final String DECISION_PROFILE_ENABLED_PROPERTY = "xmlast.decision.profile.enabled";
     private static final String DECISION_PROFILE_TOP_N_PROPERTY = "xmlast.decision.profile.top.n";
+    private static final String SEXP_EXTENSION = ".sexpr";
+    private static final String SAX_LEXICAL_HANDLER_PROPERTY = "http://xml.org/sax/properties/lexical-handler";
+    private static final String SEXP_FORMAT_COMPACT = "compact";
+    private static final String SEXP_FORMAT_BEAUTIFIED = "beautified";
 
     private final AtomicInteger completedFilesCounter = new AtomicInteger();
     private final Map<Integer, DecisionProfileAggregate> decisionProfileAggregates = new ConcurrentHashMap<>();
@@ -108,6 +118,37 @@ public final class DynamicAntlrXmlAstConverter {
             final boolean compression,
             final boolean continueOnError,
             final Consumer<String> outcomeLogger) {
+        convertFileTree(
+                sourceRoot,
+                sourceFiles,
+                destinationRoot,
+                targetExtension,
+                classLoader,
+                lexerClassName,
+                parserClassName,
+                startRule,
+                compression,
+                continueOnError,
+                SEXP_FORMAT_COMPACT,
+                outcomeLogger);
+    }
+
+    /**
+     * Converts a list of source files and allows selecting S-expression serialization format.
+     */
+    public void convertFileTree(
+            final File sourceRoot,
+            final List<File> sourceFiles,
+            final File destinationRoot,
+            final String targetExtension,
+            final ClassLoader classLoader,
+            final String lexerClassName,
+            final String parserClassName,
+            final String startRule,
+            final boolean compression,
+            final boolean continueOnError,
+            final String sexprFormat,
+            final Consumer<String> outcomeLogger) {
         validateCommonInputs(sourceRoot, sourceFiles, destinationRoot, targetExtension, classLoader, lexerClassName, parserClassName, startRule);
 
         convertFileTreeWithStats(
@@ -121,6 +162,7 @@ public final class DynamicAntlrXmlAstConverter {
                 startRule,
                 compression,
                 continueOnError,
+                sexprFormat,
                 GrammarConstants.EXECUTION_MODEL_SEQUENTIAL,
                 GrammarConstants.DEFAULT_PARALLELISM,
                 outcomeLogger
@@ -159,7 +201,43 @@ public final class DynamicAntlrXmlAstConverter {
             final String executionModelName,
             final int configuredParallelism,
             final Consumer<String> outcomeLogger) {
+        return convertFileTreeWithStats(
+                sourceRoot,
+                sourceFiles,
+                destinationRoot,
+                targetExtension,
+                classLoader,
+                lexerClassName,
+                parserClassName,
+                startRule,
+                compression,
+                continueOnError,
+                SEXP_FORMAT_COMPACT,
+                executionModelName,
+                configuredParallelism,
+                outcomeLogger);
+    }
+
+    /**
+     * Converts files and returns aggregate conversion statistics.
+     */
+    public ConversionStats convertFileTreeWithStats(
+            final File sourceRoot,
+            final List<File> sourceFiles,
+            final File destinationRoot,
+            final String targetExtension,
+            final ClassLoader classLoader,
+            final String lexerClassName,
+            final String parserClassName,
+            final String startRule,
+            final boolean compression,
+            final boolean continueOnError,
+            final String sexprFormat,
+            final String executionModelName,
+            final int configuredParallelism,
+            final Consumer<String> outcomeLogger) {
         validateCommonInputs(sourceRoot, sourceFiles, destinationRoot, targetExtension, classLoader, lexerClassName, parserClassName, startRule);
+        final SExpressionSerializer.OutputFormat resolvedSexprOutputFormat = resolveSexprOutputFormat(sexprFormat);
 
         // Guard: Parallelism constraints
         if (configuredParallelism < 1) {
@@ -195,6 +273,8 @@ public final class DynamicAntlrXmlAstConverter {
                         jobs,
                         binding,
                         startRule,
+                        targetExtension,
+                        resolvedSexprOutputFormat,
                         compression,
                         continueOnError,
                         executionModel,
@@ -317,6 +397,8 @@ public final class DynamicAntlrXmlAstConverter {
             final List<ConversionJob> jobs,
             final RuntimeParserBinding binding,
             final String startRule,
+            final String targetExtension,
+            final SExpressionSerializer.OutputFormat sexprOutputFormat,
             final boolean compression,
             final boolean continueOnError,
             final ExecutionModel executionModel,
@@ -328,7 +410,7 @@ public final class DynamicAntlrXmlAstConverter {
         if (executionModel == ExecutionModel.SEQUENTIAL || workerLimit <= 1 || jobs.size() == 1) {
             final List<ConversionOutcome> outcomes = new ArrayList<>();
             for (ConversionJob job : jobs) {
-                final ConversionOutcome outcome = processSingleFile(job, binding, startRule, compression, outcomeLogger);
+                final ConversionOutcome outcome = processSingleFile(job, binding, startRule, targetExtension, sexprOutputFormat, compression, outcomeLogger);
                 outcomes.add(outcome);
                 emitOutcomeLog(outcome, outcomeLogger);
                 if (!continueOnError && !outcome.success()) {
@@ -347,7 +429,7 @@ public final class DynamicAntlrXmlAstConverter {
                 submitted.add(completion.submit(() -> {
                     permits.acquire();
                     try {
-                        return processSingleFile(job, binding, startRule, compression, outcomeLogger);
+                        return processSingleFile(job, binding, startRule, targetExtension, sexprOutputFormat, compression, outcomeLogger);
                     } finally {
                         permits.release();
                     }
@@ -406,13 +488,15 @@ public final class DynamicAntlrXmlAstConverter {
             final ConversionJob job,
             final RuntimeParserBinding binding,
             final String startRule,
+            final String targetExtension,
+            final SExpressionSerializer.OutputFormat sexprOutputFormat,
             final boolean compression,
             final Consumer<String> outcomeLogger) {
         final long fileStartNanos = System.nanoTime();
         currentBinding.set(binding);
         try {
-            final String xml = parseToXml(job.sourceFile().toPath(), binding, startRule, compression);
-            Files.writeString(job.output(), xml, StandardCharsets.UTF_8);
+            final String content = parseToTarget(job.sourceFile().toPath(), binding, startRule, targetExtension, sexprOutputFormat, compression);
+            Files.writeString(job.output(), content, StandardCharsets.UTF_8);
             final long durationNanos = System.nanoTime() - fileStartNanos;
             final long lineCount = isLineCountMetricsEnabled() ? countLines(job.sourceFile().toPath()) : 0L;
             final long byteCount = job.sourceFile().length();
@@ -849,10 +933,12 @@ public final class DynamicAntlrXmlAstConverter {
         return base + targetExtension;
     }
 
-    private String parseToXml(
+    private String parseToTarget(
             final Path sourceFile,
             final RuntimeParserBinding binding,
             final String startRule,
+            final String targetExtension,
+            final SExpressionSerializer.OutputFormat sexprOutputFormat,
             final boolean compression) throws Exception {
         final Constructor<? extends Lexer> lexerCtor = binding.lexerCtor();
         final Lexer lexer = lexerCtor.newInstance(CharStreams.fromPath(sourceFile, StandardCharsets.UTF_8));
@@ -894,7 +980,54 @@ public final class DynamicAntlrXmlAstConverter {
             collectDecisionProfile(parser);
         }
 
-        return toXml(parser, parseTree, sourceFile.getFileName().toString(), startRule, compression);
+        final String xml = toXml(parser, parseTree, sourceFile.getFileName().toString(), startRule, compression);
+        if (isSexprTarget(targetExtension)) {
+            return xmlToSexpr(xml, sexprOutputFormat);
+        }
+        return xml;
+    }
+
+    private boolean isSexprTarget(final String targetExtension) {
+        return targetExtension != null && SEXP_EXTENSION.equalsIgnoreCase(targetExtension.trim());
+    }
+
+    private SExpressionSerializer.OutputFormat resolveSexprOutputFormat(final String sexprFormat) {
+        if (sexprFormat == null || sexprFormat.isBlank()) {
+            return SExpressionSerializer.OutputFormat.COMPACT;
+        }
+        final String normalized = sexprFormat.trim().toLowerCase(java.util.Locale.ROOT);
+        if (SEXP_FORMAT_BEAUTIFIED.equals(normalized)) {
+            return SExpressionSerializer.OutputFormat.BEAUTIFIED;
+        }
+        if (SEXP_FORMAT_COMPACT.equals(normalized)) {
+            return SExpressionSerializer.OutputFormat.COMPACT;
+        }
+        throw new IllegalArgumentException("Unsupported sexprFormat: '" + sexprFormat + "'. Expected 'compact' or 'beautified'.");
+    }
+
+    private String xmlToSexpr(final String xml, final SExpressionSerializer.OutputFormat outputFormat) throws Exception {
+        final SAXParserFactory factory = SAXParserFactory.newInstance();
+        factory.setNamespaceAware(true);
+
+        // Harden parser features even for in-memory XML to avoid accidental external lookups.
+        try {
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        } catch (Exception ignored) {
+            // Best effort; default JAXP provider may not expose all flags.
+        }
+
+        final XMLReader reader = factory.newSAXParser().getXMLReader();
+        final StringWriter output = new StringWriter();
+        final SExpressionSerializer serializer = new SExpressionSerializer(
+                output,
+                outputFormat,
+                SExpressionSerializer.SyntaxMode.CANONICAL);
+        reader.setContentHandler(serializer);
+        reader.setProperty(SAX_LEXICAL_HANDLER_PROPERTY, serializer);
+        reader.parse(new InputSource(new StringReader(xml)));
+        return output.toString();
     }
 
     private boolean isDecisionProfilingEnabled() {

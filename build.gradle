@@ -11,7 +11,7 @@ plugins {
 }
 
 group = 'name.jurgenei.gradle'
-version = '0.1.4'
+version = '0.1.5'
 
 ext {
     spotbugsEngineVersion = '4.8.6'
@@ -31,7 +31,7 @@ repositories {
 
 dependencies {
     implementation 'org.antlr:antlr4-runtime:4.13.1'
-    implementation 'name.jurgenei:xml-sax-sexpr:0.1.0'
+    implementation 'name.jurgenei:xml-sax-sexpr:0.1.1'
 
     antlr 'org.antlr:antlr4:4.13.1'
 

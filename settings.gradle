@@ -1,2 +1,11 @@
 rootProject.name = 'gradle-antlr-plugin'
 
+def astClassesCoreBuild = file('../ast-classes-core')
+if (astClassesCoreBuild.isDirectory()) {
+	includeBuild('../ast-classes-core') {
+		dependencySubstitution {
+			substitute module('name.jurgenei.ast:ast-classes-core') using project(':')
+		}
+	}
+}
+

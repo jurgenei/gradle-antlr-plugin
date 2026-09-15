@@ -1,5 +1,6 @@
 package name.jurgenei.gradle.antlr;
 
+import name.jurgenei.gradle.xml.G4toClassTask;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.plugins.JavaPluginExtension;
@@ -37,6 +38,18 @@ public class XmlAstPlugin implements Plugin<Project> {
             task.setGroup("xmlast");
             task.setDescription("Convert SQL file trees to XML AST output.");
             task.getRuntimeClasspath().from(mainSourceSet.getRuntimeClasspath());
+        });
+
+        LanguagePluginSupport.registerXmlAstTask(
+                project,
+                "antlrG4XmlAst",
+                XmlAstG4GradleTask.class,
+                "Convert ANTLRv4 grammar files to XML AST output.");
+        LanguagePluginSupport.wireJavaRuntimeClasspath(project, XmlAstG4GradleTask.class);
+
+        project.getTasks().register("antlrG4ToClass", G4toClassTask.class, task -> {
+            task.setGroup("xmlast");
+            task.setDescription("Convert ANTLRv4 grammar files to GrammarModel and AST-Classes output.");
         });
 
         project.getTasks().withType(XmlAstGradleTask.class).configureEach(task -> {

@@ -10,8 +10,8 @@ plugins {
     id 'org.sonarqube' version '6.0.1.5171'
 }
 
-group = 'name.jurgenei.gradle'
-version = '0.1.5'
+group = "name.jurgenei.gradle"
+version = '0.1.6'
 
 ext {
     spotbugsEngineVersion = '4.8.6'
@@ -27,11 +27,14 @@ java {
 
 repositories {
     mavenCentral()
+    gradlePluginPortal()
+    mavenLocal()
 }
 
 dependencies {
     implementation 'org.antlr:antlr4-runtime:4.13.1'
     implementation 'name.jurgenei:xml-sax-sexpr:0.1.1'
+    implementation 'name.jurgenei.ast:ast-classes-core:0.1.0'
 
     antlr 'org.antlr:antlr4:4.13.1'
 
@@ -50,8 +53,8 @@ gradlePlugin {
             id = 'name.jurgenei.gradle.antlr'
             implementationClass = 'name.jurgenei.gradle.antlr.XmlAstPlugin'
             displayName = 'Antlr XmlAst plugin'
-            description = 'Converts source files to XML AST using pluggable ANTLR grammars.'
-            tags = ['antlr', 'xml', 'ast', 'sql', 'parser']
+            description = 'Converts source files to XML AST using pluggable ANTLR grammars, including ANTLRv4 task presets.'
+            tags = ['antlr', 'xml', 'ast', 'sql', 'parser', 'g4', 'grammar']
         }
     }
 }

@@ -1,0 +1,11 @@
+pluginManagement {
+	includeBuild('../..')
+	repositories {
+		mavenLocal()
+		gradlePluginPortal()
+		mavenCentral()
+	}
+}
+
+rootProject.name = 'set-grammar-sample'
+

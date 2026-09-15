@@ -1,4 +1,4 @@
-# Gradle ANTLR Plugin (`name.jurgenei.gradle.antlr`)
+# Gradle ANTLR Plugin
 
 ![Conformance](https://img.shields.io/badge/Conformance-Check--All%20Passing-brightgreen)
 
@@ -10,52 +10,156 @@
 [![Java](https://img.shields.io/badge/java-21+-green.svg)](https://www.oracle.com/java/)
 [![Gradle](https://img.shields.io/badge/gradle-8+-blue.svg)](https://gradle.org/)
 
-Turn SQL files into XML AST files in your Gradle build.
+## What Plugin Adds
 
-This plugin is designed for teams that need reliable, repeatable SQL parsing in CI/CD and local development without custom shell scripts.
+- `xmlast` task (`name.jurgenei.gradle.antlr.XmlAstGradleTask`)
+- `antlrG4XmlAst` task (`name.jurgenei.gradle.antlr.XmlAstG4GradleTask`)
+- `antlrG4ToClass` task (`name.jurgenei.gradle.xml.G4toClassTask`)
+- runtime classpath wiring from Java `main` source set
+- `classes` dependency wiring for `XmlAstGradleTask` and `XmlAstTask`
 
-## Why You Would Use This
+Legacy compatibility plugin id also available:
 
-- Build lineage inputs from SQL procedures, functions, and views
-- Feed SQL ASTs into XSLT/JSON transforms and governance pipelines
-- Keep parser execution as a normal Gradle task (incremental-friendly, scriptable, easy to automate)
-- Handle large file sets with configurable execution model and parallelism
+- `name.jurgenei.gradle.antlr.g4`
+- adds `g4XmlAst` and `g4ToClass`
 
-## Requirements
+## Task Catalog
 
-- Java 21+
-- Gradle 8+
+### `xmlast`
 
-## Install
+Purpose: convert source files (typically SQL) to XML AST or S-expression output.
+
+Defaults:
+
+- `sourceDirectory`: `src/main/sql`
+- `destinationDirectory`: `target/xmlast`
+- `includes`: `['**/*.sql']`
+- `targetExtension`: `.xml`
+- `startRule`: `script`
+- `sexprFormat`: `compact`
+
+Minimal sample:
 
 ```groovy
-plugins {
-    id 'name.jurgenei.gradle.antlr' version '0.1.1'
+tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+    sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
+    destinationDirectory.set(layout.buildDirectory.dir('xmlast'))
+
+    parserClassName.set('name.jurgenei.parsers.PlSqlParser')
+    lexerClassName.set('name.jurgenei.parsers.PlSqlLexer')
+    startRule.set('script')
+
+    includes.set(['**/*.sql'])
+    targetExtension.set('.xml')
 }
 ```
 
-Plugin Portal page: https://plugins.gradle.org/plugin/name.jurgenei.gradle.antlr
+S-expression sample:
 
-## Quick Start (Most Common Setup)
+```groovy
+tasks.register('sexprast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+    sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
+    destinationDirectory.set(layout.buildDirectory.dir('sexpr-ast'))
 
-This setup uses already generated parser/lexer classes on your runtime classpath.
+    parserClassName.set('name.jurgenei.parsers.PlSqlParser')
+    lexerClassName.set('name.jurgenei.parsers.PlSqlLexer')
+    startRule.set('script')
+
+    includes.set(['**/*.sql'])
+    targetExtension.set('.sexpr')
+    sexprFormat.set('beautified') // compact|beautified
+}
+```
+
+### `antlrG4XmlAst`
+
+Purpose: convert `.g4` files to XML AST with ANTLRv4 defaults preconfigured.
+
+Preconfigured defaults:
+
+- `grammar`: `antlr4`
+- `parserClassName`: `name.jurgenei.parsers.ANTLRv4Parser`
+- `lexerClassName`: `name.jurgenei.parsers.ANTLRv4Lexer`
+- `startRule`: `grammarSpec`
+- `includes`: `['**/*.g4']`
+
+Sample:
+
+```groovy
+tasks.named('antlrG4XmlAst', name.jurgenei.gradle.antlr.XmlAstG4GradleTask) {
+    sourceDirectory.set(layout.projectDirectory.dir('src/main/antlr'))
+    destinationDirectory.set(layout.buildDirectory.dir('antlr-g4-xmlast'))
+    targetExtension.set('.xml')
+}
+```
+
+### `antlrG4ToClass`
+
+Purpose: derive grammar model + AST classes S-expression artifacts from `.g4` files.
+
+Preconfigured defaults:
+
+- `parserClassName`: `name.jurgenei.parsers.ANTLRv4Parser`
+- `lexerClassName`: `name.jurgenei.parsers.ANTLRv4Lexer`
+- `startRule`: `grammarSpec`
+- `classOutputExtension`: `.classes.sexp`
+- `modelOutputExtension`: `.model.sexp`
+
+Sample (file-set mode):
+
+```groovy
+tasks.named('antlrG4ToClass', name.jurgenei.gradle.xml.G4toClassTask) {
+    fileset('src/main/antlr') {
+        include '**/*.g4'
+    }
+    outputDir.set(layout.buildDirectory.dir('g4-model'))
+    failOnError.set(true)
+}
+```
+
+Run:
+
+```bash
+./gradlew xmlast
+./gradlew antlrG4XmlAst
+./gradlew antlrG4ToClass
+./gradlew sexprast
+```
+
+## Quick Start (No Extra Gradle Plugin Dependencies)
+
+Sample uses only:
+
+- `java`
+- `name.jurgenei.gradle.antlr`
+
+Parser/Lexer classes come from regular runtime dependency jar. No grammar-specific Gradle plugin required.
 
 ```groovy
 plugins {
     id 'java'
-    id 'name.jurgenei.gradle.antlr' version '0.1.1'
+    id 'name.jurgenei.gradle.antlr' version '0.1.6'
 }
 
 repositories {
     mavenCentral()
+    gradlePluginPortal()
+}
+
+dependencies {
+    implementation 'org.antlr:antlr4-runtime:4.13.2'
+
+    // Example: parser jar published independently.
+    // Replace with your own parser artifact.
+    implementation 'name.jurgenei.gradle:gradle-antlr-plsql-plugin:0.1.3'
 }
 
 tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
     sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
     destinationDirectory.set(layout.buildDirectory.dir('xmlast'))
 
-    parserClassName.set('com.example.sql.PlSqlParser')
-    lexerClassName.set('com.example.sql.PlSqlLexer')
+    parserClassName.set('name.jurgenei.parsers.PlSqlParser')
+    lexerClassName.set('name.jurgenei.parsers.PlSqlLexer')
     startRule.set('script')
 
     includes.set(['**/*.sql'])
@@ -70,175 +174,14 @@ Run:
 ./gradlew xmlast
 ```
 
-## Core Use Cases
+## G4 Compatibility ID
 
-### 1) Parse a full SQL tree for lineage ingestion
+Use only when you need `g4XmlAst` or `g4ToClass` tasks from legacy id:
 
 ```groovy
-tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
-    sourceDirectory.set(file('/path/to/oracle'))
-    destinationDirectory.set(file('/path/to/oracle.output'))
-    includes.set([
-        '{buss,cons,sdp,dsa}/procedures/*.sql',
-        '{buss,cons,sdp,dsa}/procedures/**/*.sql'
-    ])
+plugins {
+    id 'java'
+    id 'name.jurgenei.gradle.antlr.g4' version '0.1.6'
 }
 ```
 
-### 2) Keep builds moving even with a few parser errors
-
-```groovy
-tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
-    continueOnError.set(true)
-    failOnError.set(false)
-    failOnTransformationError.set(false)
-    suppressStackTrace.set(true)
-}
-```
-
-### 3) Improve throughput on larger file sets
-
-```groovy
-tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
-    executionModel.set('VIRTUAL_THREADS')
-    parallelism.set(3)
-}
-```
-
-### 3b) Recommended memory settings for very large batches
-
-For large runs (for example, tens of thousands of files), tune the new memory-pressure controls:
-
-```groovy
-tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
-    // Keep queue depth bounded to avoid excessive in-memory backlog.
-    maxInFlightJobs.set(16)
-    // Run cache-pressure cleanup more frequently during long runs.
-    cachePressureCheckInterval.set(32)
-    // Start pressure mitigation before heap usage gets too close to max.
-    memoryPressureThresholdPercent.set(80)
-}
-```
-
-### 4) Force a clean re-parse when needed
-
-```groovy
-tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
-    force.set(true)
-}
-```
-
-### 5) Profile grammar decisions (ambiguity/backtracking hotspots)
-
-```groovy
-tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
-    enableDecisionProfiling.set(true)
-    decisionProfileTopN.set(15)
-}
-```
-
-When enabled, logs print `[PROFILE]` lines with top parser decisions by `timeInPrediction`.
-
-## Output Behavior
-
-For each selected source file, one AST file is created in destination tree with relative path preserved.
-
-- `targetExtension.set('.xml')` -> XML AST output
-- `targetExtension.set('.sexpr')` (or `.SEXPR`) -> canonical S-expression AST output
-- When using `.sexpr`, `sexprFormat` controls rendering: `compact` (default) or `beautified`
-
-- Input: `src/main/sql/demo/query.sql`
-- Output: `build/xmlast/demo/query.xml`
-
-S-expression output example:
-
-```groovy
-tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
-    targetExtension.set('.sexpr')
-    sexprFormat.set('beautified')
-}
-```
-
-## Configuration Reference (`XmlAstGradleTask`)
-
-Most-used properties:
-
-- `sourceDirectory`: input root
-- `destinationDirectory`: output root
-- `includes` / `excludes`: glob filters
-- `parserClassName` / `lexerClassName`: parser coordinates
-- `startRule`: parser entry point
-- `targetExtension`: usually `.xml`
-- `sexprFormat`: `compact` or `beautified` when target extension is `.sexpr`
-- `force`: bypass timestamp checks
-- `continueOnError`, `failOnError`, `failOnTransformationError`, `suppressStackTrace`
-- `executionModel`: `SEQUENTIAL`, `PLATFORM_THREADS`, `VIRTUAL_THREADS`
-- `parallelism`: worker cap for threaded models
-- `compression`: compact rule-chain output
-- `enableLineCountMetrics`: include per-file line counts in logs (disable for max throughput)
-- `enableDecisionProfiling`: emit top parser decisions by prediction time
-- `decisionProfileTopN`: number of decisions printed in profile summary
-- `catalogFile` / `catalogGrammar`: optional catalog-driven config
-- `runtimeClasspath`: where parser/runtime classes are loaded from
-
-## Catalog-Based Setup (Team-Friendly)
-
-Use a shared `catalog.xml` to keep parser details out of build scripts.
-
-`catalog.xml`:
-
-```xml
-<catalog>
-  <grammar
-      name="plsql"
-      parser="com.example.sql.PlSqlParser"
-      lexer="com.example.sql.PlSqlLexer"
-      start-rule="script"/>
-</catalog>
-```
-
-`build.gradle`:
-
-```groovy
-tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
-    catalogFile.set(layout.projectDirectory.file('catalog.xml'))
-    catalogGrammar.set('plsql')
-}
-```
-
-## Optional: Grammar Source (`.g4`) Coordinates
-
-If your parser/lexer are provided as grammar sources, you can point the task directly to `.g4` locations.
-
-```groovy
-tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
-    parserClassName.set('https://example.org/grammars/PlSqlParser.g4')
-    lexerClassName.set('https://example.org/grammars/PlSqlLexer.g4')
-    startRule.set('script')
-}
-```
-
-## Troubleshooting
-
-- `ClassNotFoundException` for parser/lexer:
-  - Ensure parser classes are on `runtimeClasspath`
-  - Ensure generation/compile steps run before `xmlast`
-- `NoSuchMethodException` for start rule:
-  - Confirm `startRule` matches a real parser entry method
-- `catalogGrammar is required when catalogFile is configured`:
-  - Set both `catalogFile` and `catalogGrammar`
-- Build runs but no output files:
-  - Verify include patterns and source directory
-  - Use `force=true` for one clean pass
-
-## Typical Workflow in CI
-
-```bash
-./gradlew clean xmlast
-```
-
-Then consume generated XML from `destinationDirectory` in downstream tasks.
-
-## Version
-
-Current plugin version in examples: `0.1.1`.

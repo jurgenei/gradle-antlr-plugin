@@ -1,0 +1,44 @@
+
+plugins {
+    id 'java'
+    id 'name.jurgenei.gradle.antlr'
+}
+
+repositories {
+    mavenCentral()
+    gradlePluginPortal()
+    mavenLocal()
+}
+
+dependencies {
+    implementation 'org.antlr:antlr4-runtime:4.13.2'
+    implementation 'name.jurgenei.gradle:gradle-antlr-plsql-plugin:0.1.3'
+}
+
+tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+    sourceDirectory.set(layout.projectDirectory.dir('../../src/test/resources/fixtures/mini/valid'))
+    destinationDirectory.set(layout.buildDirectory.dir('xml-ast-samples'))
+
+    parserClassName.set('name.jurgenei.parsers.PlSqlParser')
+    lexerClassName.set('name.jurgenei.parsers.PlSqlLexer')
+    startRule.set('script')
+
+    includes.set(['**/*.sql'])
+    targetExtension.set('.xml')
+    continueOnError.set(true)
+}
+
+tasks.register('sexprast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+    sourceDirectory.set(layout.projectDirectory.dir('../../src/test/resources/fixtures/mini/valid'))
+    destinationDirectory.set(layout.buildDirectory.dir('sexpr-ast-samples'))
+
+    parserClassName.set('name.jurgenei.parsers.PlSqlParser')
+    lexerClassName.set('name.jurgenei.parsers.PlSqlLexer')
+    startRule.set('script')
+
+
+    includes.set(['**/*.sql'])
+    targetExtension.set('.sexpr')
+    sexprFormat.set('beautified')
+    continueOnError.set(true)
+}

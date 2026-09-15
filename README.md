@@ -1,5 +1,15 @@
 # Gradle ANTLR Plugin
 
+![Conformance](https://img.shields.io/badge/Conformance-Check--All%20Passing-brightgreen)
+
+[![Plugin Portal](https://img.shields.io/gradle-plugin-portal/v/name.jurgenei.gradle.antlr?label=Plugin%20Portal)](https://plugins.gradle.org/plugin/name.jurgenei.gradle.antlr)
+[![Build and Test](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/ci.yml)
+[![Coverage CI](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/coverage.yml/badge.svg)](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/coverage.yml)
+[![Coverage](https://codecov.io/gh/jurgenei/gradle-antlr-plugin/graph/badge.svg)](https://codecov.io/gh/jurgenei/gradle-antlr-plugin)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Java](https://img.shields.io/badge/java-21+-green.svg)](https://www.oracle.com/java/)
+[![Gradle](https://img.shields.io/badge/gradle-8+-blue.svg)](https://gradle.org/)
+
 Plugin Portal page: https://plugins.gradle.org/plugin/name.jurgenei.gradle.antlr
 
 ## What Plugin Adds
@@ -30,7 +40,7 @@ plugins {
 
 repositories {
     mavenCentral()
-    mavenLocal()
+    gradlePluginPortal()
 }
 
 dependencies {

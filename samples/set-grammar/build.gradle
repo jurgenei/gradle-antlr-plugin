@@ -1,0 +1,27 @@
+
+plugins {
+    id 'base'
+    id 'name.jurgenei.gradle.antlr' version '0.1.6'
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    gradlePluginPortal()
+}
+
+tasks.named('ast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+    sourceDirectory.set(layout.projectDirectory.dir('../../src/test/resources/fixtures/mini/valid'))
+    destinationDirectory.set(layout.buildDirectory.dir('build/xmlast-samples'))
+
+    parserClassName.set('../../resources/grammars/mini/parser.g4')
+    lexerClassName.set('../../resources/grammars/mini/lexer.g4')
+    startRule.set('script')
+    targetExtension.set('.sexpr')
+    sexprFormat.set('beautified')
+
+
+    includes.set(['**/*.sql'])
+    targetExtension.set('.xml')
+    continueOnError.set(true)
+}

@@ -25,10 +25,10 @@ public class G4toClassTaskFunctionalTest {
         writeBuildFile(projectDir, """
                 plugins {
                     id 'java'
-                    id 'name.jurgenei.gradle.antlr.g4'
+                    id 'name.jurgenei.gradle.antlr'
                 }
 
-                tasks.named('g4ToClass', name.jurgenei.gradle.xml.G4toClassTask) {
+                tasks.named('antlrG4ToClass', name.jurgenei.gradle.xml.G4toClassTask) {
                     fileset('src/main/antlr') {
                         include '**/*.g4'
                     }
@@ -40,9 +40,9 @@ public class G4toClassTaskFunctionalTest {
         Assert.assertTrue(srcDir.mkdirs());
         Files.writeString(new File(srcDir, "mini.g4").toPath(), sampleGrammar(), StandardCharsets.UTF_8);
 
-        final BuildResult result = run(projectDir, "g4ToClass");
+        final BuildResult result = run(projectDir, "antlrG4ToClass");
 
-        final BuildTask task = result.task(":g4ToClass");
+        final BuildTask task = result.task(":antlrG4ToClass");
         Assert.assertNotNull(task);
         Assert.assertEquals(TaskOutcome.SUCCESS, task.getOutcome());
 

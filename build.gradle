@@ -32,6 +32,7 @@ repositories {
 dependencies {
     implementation 'org.antlr:antlr4-runtime:4.13.1'
     implementation 'name.jurgenei:xml-sax-sexpr:0.1.1'
+    implementation 'name.jurgenei.ast:ast-classes-core:0.1.0'
 
     antlr 'org.antlr:antlr4:4.13.1'
 
@@ -52,6 +53,13 @@ gradlePlugin {
             displayName = 'Antlr XmlAst plugin'
             description = 'Converts source files to XML AST using pluggable ANTLR grammars.'
             tags = ['antlr', 'xml', 'ast', 'sql', 'parser']
+        }
+        antlrG4Plugin {
+            id = 'name.jurgenei.gradle.antlr.g4'
+            implementationClass = 'name.jurgenei.gradle.antlr.CompatG4Plugin'
+            displayName = 'Antlr G4 XmlAst plugin'
+            description = 'Preconfigured XML AST and AST-class generation tasks for ANTLRv4 grammar files.'
+            tags = ['antlr', 'xml', 'ast', 'g4', 'grammar']
         }
     }
 }

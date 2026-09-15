@@ -10,15 +10,18 @@ repositories {
     gradlePluginPortal()
 }
 
-tasks.named('ast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
-    sourceDirectory.set(layout.projectDirectory.dir('../../src/test/resources/fixtures/mini/valid'))
-    destinationDirectory.set(layout.buildDirectory.dir('build/xmlast-samples'))
+dependencies {
+    implementation 'org.antlr:antlr4-runtime:4.13.2'
+    implementation 'name.jurgenei.gradle:gradle-antlr-plsql-plugin:0.1.3'
+}
 
-    parserClassName.set('../../resources/grammars/mini/parser.g4')
-    lexerClassName.set('../../resources/grammars/mini/lexer.g4')
+tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+    sourceDirectory.set(layout.projectDirectory.dir('../../src/test/resources/fixtures/mini/valid'))
+    destinationDirectory.set(layout.buildDirectory.dir('xmlast-samples'))
+
+    parserClassName.set('name.jurgenei.parsers.PlSqlParser')
+    lexerClassName.set('name.jurgenei.parsers.PlSqlLexer')
     startRule.set('script')
-    targetExtension.set('.sexpr')
-    sexprFormat.set('beautified')
 
 
     includes.set(['**/*.sql'])

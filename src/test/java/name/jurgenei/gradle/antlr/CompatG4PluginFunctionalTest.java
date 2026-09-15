@@ -17,35 +17,35 @@ public class CompatG4PluginFunctionalTest {
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
     @Test
-    public void registersG4TasksViaLegacyPluginId() throws Exception {
+    public void registersG4TasksViaMainPluginId() throws Exception {
         final File projectDir = temporaryFolder.newFolder("functional-registers-g4-compat");
         writeSettings(projectDir);
         writeBuildFile(projectDir, """
                 plugins {
                     id 'java'
-                    id 'name.jurgenei.gradle.antlr.g4'
+                    id 'name.jurgenei.gradle.antlr'
                 }
                 """);
 
         final BuildResult result = run(projectDir, "tasks", "--all");
 
-        Assert.assertTrue("Expected g4XmlAst task", result.getOutput().contains("g4XmlAst"));
-        Assert.assertTrue("Expected g4ToClass task", result.getOutput().contains("g4ToClass"));
+        Assert.assertTrue("Expected antlrG4XmlAst task", result.getOutput().contains("antlrG4XmlAst"));
+        Assert.assertTrue("Expected antlrG4ToClass task", result.getOutput().contains("antlrG4ToClass"));
     }
 
     @Test
-    public void preconfiguredDefaultsAreApplied() throws Exception {
+    public void preconfiguredDefaultsAreAppliedForMergedTask() throws Exception {
         final File projectDir = temporaryFolder.newFolder("functional-g4-compat-defaults");
         writeSettings(projectDir);
         writeBuildFile(projectDir, """
                 plugins {
                     id 'java'
-                    id 'name.jurgenei.gradle.antlr.g4'
+                    id 'name.jurgenei.gradle.antlr'
                 }
 
                 tasks.register('printG4Defaults') {
                     doLast {
-                        def t = tasks.named('g4XmlAst').get()
+                        def t = tasks.named('antlrG4XmlAst').get()
                         println "grammar=${t.grammar.get()}"
                         println "parserClassName=${t.parserClassName.get()}"
                         println "lexerClassName=${t.lexerClassName.get()}"

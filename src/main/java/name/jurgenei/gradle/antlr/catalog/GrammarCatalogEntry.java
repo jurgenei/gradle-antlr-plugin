@@ -6,34 +6,18 @@ import java.nio.file.Path;
 /**
  * Immutable grammar entry loaded from a catalog file.
  */
-public final class GrammarCatalogEntry {
-
-    private final String name;
-    private final String runtimeGrammar;
-    private final String parser;
-    private final String lexer;
-    private final String startRule;
+public record GrammarCatalogEntry(String name, String runtimeGrammar, String parser, String lexer, String startRule) {
 
     /**
      * Creates an immutable grammar catalog entry.
      *
-     * @param name catalog grammar name.
+     * @param name           catalog grammar name.
      * @param runtimeGrammar optional runtime grammar key used by legacy converter mode.
-     * @param parser parser coordinate (path or class name depending on task configuration).
-     * @param lexer lexer coordinate (path or class name depending on task configuration).
-     * @param startRule parser entry rule name.
+     * @param parser         parser coordinate (path or class name depending on task configuration).
+     * @param lexer          lexer coordinate (path or class name depending on task configuration).
+     * @param startRule      parser entry rule name.
      */
-    public GrammarCatalogEntry(
-            final String name,
-            final String runtimeGrammar,
-            final String parser,
-            final String lexer,
-            final String startRule) {
-        this.name = name;
-        this.runtimeGrammar = runtimeGrammar;
-        this.parser = parser;
-        this.lexer = lexer;
-        this.startRule = startRule;
+    public GrammarCatalogEntry {
     }
 
     /**
@@ -41,7 +25,8 @@ public final class GrammarCatalogEntry {
      *
      * @return catalog grammar name.
      */
-    public String getName() {
+    @Override
+    public String name() {
         return name;
     }
 
@@ -50,7 +35,8 @@ public final class GrammarCatalogEntry {
      *
      * @return optional runtime grammar key.
      */
-    public String getRuntimeGrammar() {
+    @Override
+    public String runtimeGrammar() {
         return runtimeGrammar;
     }
 
@@ -59,7 +45,8 @@ public final class GrammarCatalogEntry {
      *
      * @return parser coordinate value.
      */
-    public String getParser() {
+    @Override
+    public String parser() {
         return parser;
     }
 
@@ -68,7 +55,8 @@ public final class GrammarCatalogEntry {
      *
      * @return lexer coordinate value.
      */
-    public String getLexer() {
+    @Override
+    public String lexer() {
         return lexer;
     }
 
@@ -77,7 +65,8 @@ public final class GrammarCatalogEntry {
      *
      * @return parser entry rule name.
      */
-    public String getStartRule() {
+    @Override
+    public String startRule() {
         return startRule;
     }
 

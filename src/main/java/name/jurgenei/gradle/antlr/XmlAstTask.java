@@ -50,7 +50,7 @@ public abstract class XmlAstTask extends DefaultTask {
     private final DirectoryProperty destinationDirectory;
     private final Property<String> grammar;
     private final Property<String> targetExtension;
-    private final Property<String> sexprFormat;
+    private final Property<String> xirFormat;
     private final Property<Integer> parallelism;
     private final Property<String> executionModel;
     private final ListProperty<String> includes;
@@ -73,7 +73,7 @@ public abstract class XmlAstTask extends DefaultTask {
         destinationDirectory = objects.directoryProperty();
         grammar = objects.property(String.class).convention("oracle");
         targetExtension = objects.property(String.class).convention(".xml");
-        sexprFormat = objects.property(String.class).convention("compact");
+        xirFormat = objects.property(String.class).convention("compact");
         parallelism = objects.property(Integer.class).convention(1);
         executionModel = objects.property(String.class).convention("SEQUENTIAL");
         includes = objects.listProperty(String.class).convention(List.of("**/*.sql"));
@@ -129,13 +129,13 @@ public abstract class XmlAstTask extends DefaultTask {
     }
 
     /**
-     * S-expression output format used when {@code targetExtension} is {@code .sexpr}.
+     * S-expression output format used when {@code targetExtension} is {@code .xir}.
      *
      * @return S-expression output format property.
      */
     @Input
-    public Property<String> getSexprFormat() {
-        return sexprFormat;
+    public Property<String> getXirFormat() {
+        return xirFormat;
     }
 
     /**
@@ -298,7 +298,7 @@ public abstract class XmlAstTask extends DefaultTask {
                             resolvedConfig.startRule(),
                             compression.get(),
                             true,
-                            sexprFormat.get(),
+                            xirFormat.get(),
                             m -> getLogger().lifecycle(m));
                 }
             }
@@ -326,16 +326,16 @@ public abstract class XmlAstTask extends DefaultTask {
         final GrammarCatalogLoader loader = new GrammarCatalogLoader();
         final GrammarCatalogEntry entry = loader.load(catalogFile.get().getAsFile()).require(catalogGrammar.get());
         if (resolvedParser == null || resolvedParser.isBlank()) {
-            resolvedParser = resolveCatalogCoordinate(entry.getParser(), true);
+            resolvedParser = resolveCatalogCoordinate(entry.parser(), true);
         }
         if (resolvedLexer == null || resolvedLexer.isBlank()) {
-            resolvedLexer = resolveCatalogCoordinate(entry.getLexer(), false);
+            resolvedLexer = resolveCatalogCoordinate(entry.lexer(), false);
         }
-        resolvedStartRule = entry.getStartRule();
+        resolvedStartRule = entry.startRule();
 
         getLogger().info(
                 "Resolved catalog grammar '{}' (runtimeGrammar='{}') -> parser={}, lexer={}, startRule={}",
-                entry.getName(),
+                entry.name(),
                 entry.resolveRuntimeGrammar(),
                 resolvedParser,
                 resolvedLexer,

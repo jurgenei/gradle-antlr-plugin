@@ -17,7 +17,7 @@ public class CompatG4PluginTest {
 
         final Object task = project.getTasks().getByName("g4XmlAst");
         Assert.assertNotNull(task);
-        XmlAstG4GradleTask.class.cast(task);
+        Assert.assertTrue(task instanceof XmlAstG4GradleTask);
     }
 
     @Test
@@ -27,14 +27,14 @@ public class CompatG4PluginTest {
 
         new CompatG4Plugin().apply(project);
 
-        final XmlAstG4GradleTask task = XmlAstG4GradleTask.class.cast(project.getTasks().getByName("g4XmlAst"));
+        final XmlAstG4GradleTask task = (XmlAstG4GradleTask) project.getTasks().getByName("g4XmlAst");
         Assert.assertEquals("antlr4", task.getGrammar().get());
         Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Parser", task.getParserClassName().get());
         Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Lexer", task.getLexerClassName().get());
         Assert.assertEquals("grammarSpec", task.getStartRule().get());
         Assert.assertTrue(task.getIncludes().get().contains("**/*.g4"));
         Assert.assertEquals(".xml", task.getTargetExtension().get());
-        Assert.assertEquals("compact", task.getSexprFormat().get());
+        Assert.assertEquals("compact", task.getXirFormat().get());
     }
 
     @Test
@@ -43,12 +43,11 @@ public class CompatG4PluginTest {
 
         new CompatG4Plugin().apply(project);
 
-        final G4toClassTask task = G4toClassTask.class.cast(project.getTasks().getByName("g4ToClass"));
-        Assert.assertEquals(".classes.sexp", task.getClassOutputExtension().get());
-        Assert.assertEquals(".model.sexp", task.getModelOutputExtension().get());
+        final G4toClassTask task = (G4toClassTask) project.getTasks().getByName("g4ToClass");
+        Assert.assertEquals(".classes.xir", task.getClassOutputExtension().get());
+        Assert.assertEquals(".model.xir", task.getModelOutputExtension().get());
         Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Parser", task.getParserClassName().get());
         Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Lexer", task.getLexerClassName().get());
         Assert.assertEquals("grammarSpec", task.getStartRule().get());
     }
 }
-

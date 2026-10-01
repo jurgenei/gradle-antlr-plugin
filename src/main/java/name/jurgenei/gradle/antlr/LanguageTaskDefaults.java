@@ -16,7 +16,7 @@ public record LanguageTaskDefaults(
         String startRule,
         List<String> includes,
         String targetExtension,
-        String sexprFormat) {
+        String xirFormat) {
 
     /**
      * Creates language defaults with XML output and compact S-expression rendering defaults.
@@ -47,7 +47,7 @@ public record LanguageTaskDefaults(
             final String startRule,
             final List<String> includes,
             final String targetExtension,
-            final String sexprFormat) {
+            final String xirFormat) {
         return new LanguageTaskDefaults(
                 grammar,
                 parserClassName,
@@ -55,7 +55,7 @@ public record LanguageTaskDefaults(
                 startRule,
                 includes,
                 targetExtension,
-                sexprFormat);
+                xirFormat);
     }
 
     public LanguageTaskDefaults {
@@ -65,7 +65,7 @@ public record LanguageTaskDefaults(
         Objects.requireNonNull(startRule, "startRule cannot be null");
         Objects.requireNonNull(includes, "includes cannot be null");
         Objects.requireNonNull(targetExtension, "targetExtension cannot be null");
-        Objects.requireNonNull(sexprFormat, "sexprFormat cannot be null");
+        Objects.requireNonNull(xirFormat, "xirFormat cannot be null");
     }
 
     /**
@@ -78,7 +78,7 @@ public record LanguageTaskDefaults(
         task.getStartRule().convention(startRule);
         task.getIncludes().convention(List.copyOf(includes));
         task.getTargetExtension().convention(targetExtension);
-        task.getSexprFormat().convention(sexprFormat);
+        task.getXirFormat().convention(xirFormat);
     }
 }
 

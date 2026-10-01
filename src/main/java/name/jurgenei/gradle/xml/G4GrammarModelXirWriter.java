@@ -15,7 +15,7 @@ import name.jurgenei.ast.core.model.SequenceNode;
 /**
  * Writes GrammarModel into compact S-expression format.
  */
-public final class G4GrammarModelSexprWriter {
+public final class G4GrammarModelXirWriter {
 
     public String write(final GrammarModel grammarModel) {
         final StringBuilder out = new StringBuilder();
@@ -28,54 +28,54 @@ public final class G4GrammarModelSexprWriter {
     }
 
     private void writeNode(final GrammarNode node, final StringBuilder out) {
-        if (node instanceof SequenceNode seq) {
+        if (node instanceof SequenceNode(java.util.List<GrammarNode> elements)) {
             out.append("(sequence");
-            for (GrammarNode child : seq.elements()) {
+            for (GrammarNode child : elements) {
                 out.append(' ');
                 writeNode(child, out);
             }
             out.append(')');
             return;
         }
-        if (node instanceof ChoiceNode choice) {
+        if (node instanceof ChoiceNode(java.util.List<GrammarNode> alternatives)) {
             out.append("(choice");
-            for (GrammarNode child : choice.alternatives()) {
+            for (GrammarNode child : alternatives) {
                 out.append(' ');
                 writeNode(child, out);
             }
             out.append(')');
             return;
         }
-        if (node instanceof OptionalNode optional) {
+        if (node instanceof OptionalNode(GrammarNode node4)) {
             out.append("(optional ");
-            writeNode(optional.node(), out);
+            writeNode(node4, out);
             out.append(')');
             return;
         }
-        if (node instanceof RepeatNode repeat) {
+        if (node instanceof RepeatNode(GrammarNode node3)) {
             out.append("(repeat ");
-            writeNode(repeat.node(), out);
+            writeNode(node3, out);
             out.append(')');
             return;
         }
-        if (node instanceof Repeat1Node repeat1) {
+        if (node instanceof Repeat1Node(GrammarNode node2)) {
             out.append("(repeat1 ");
-            writeNode(repeat1.node(), out);
+            writeNode(node2, out);
             out.append(')');
             return;
         }
-        if (node instanceof LabelNode label) {
-            out.append("(label ").append(label.label()).append(' ');
-            writeNode(label.node(), out);
+        if (node instanceof LabelNode(String label1, GrammarNode node1)) {
+            out.append("(label ").append(label1).append(' ');
+            writeNode(node1, out);
             out.append(')');
             return;
         }
-        if (node instanceof RuleRefNode ref) {
-            out.append("(ruleRef ").append(ref.ruleName()).append(')');
+        if (node instanceof RuleRefNode(String ruleName)) {
+            out.append("(ruleRef ").append(ruleName).append(')');
             return;
         }
-        if (node instanceof LiteralNode lit) {
-            out.append("(literal \"").append(escape(lit.text())).append("\")");
+        if (node instanceof LiteralNode(String text)) {
+            out.append("(literal \"").append(escape(text)).append("\")");
             return;
         }
         throw new IllegalArgumentException("Unsupported node type: " + node.getClass().getName());

@@ -30,7 +30,7 @@ public class GrammarCatalogLoaderTest {
         final GrammarCatalogEntry entry = loader.load(catalog).require("plsql");
 
         Assert.assertEquals("oracle", entry.resolveRuntimeGrammar());
-        Assert.assertEquals("script", entry.getStartRule());
+        Assert.assertEquals("script", entry.startRule());
         Assert.assertEquals(parser.toPath().toAbsolutePath().normalize(), entry.resolveParserPath(catalog.toPath().getParent()));
         Assert.assertEquals(lexer.toPath().toAbsolutePath().normalize(), entry.resolveLexerPath(catalog.toPath().getParent()));
     }

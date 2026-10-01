@@ -33,8 +33,8 @@ repositories {
 
 dependencies {
     implementation 'org.antlr:antlr4-runtime:4.13.1'
-    implementation 'name.jurgenei:xml-sax-sexpr:0.1.1'
-    implementation 'name.jurgenei.ast:ast-classes-core:0.1.0'
+    implementation 'name.jurgenei:xir-sax:0.1.2'
+    implementation 'name.jurgenei:xir-g4:0.1.0'
 
     antlr 'org.antlr:antlr4:4.13.1'
 
@@ -213,4 +213,3 @@ tasks.register('allSecurityChecks') {
     dependsOn tasks.named('dependencyCheck')
     dependsOn tasks.named('spotbugsMain')
 }
-

@@ -46,8 +46,8 @@ public class G4toClassTaskFunctionalTest {
         Assert.assertNotNull(task);
         Assert.assertEquals(TaskOutcome.SUCCESS, task.getOutcome());
 
-        final File classesFile = new File(projectDir, "build/class-model/mini.classes.sexp");
-        final File modelFile = new File(projectDir, "build/class-model/mini.model.sexp");
+        final File classesFile = new File(projectDir, "build/class-model/mini.classes.xir");
+        final File modelFile = new File(projectDir, "build/class-model/mini.model.xir");
         Assert.assertTrue(classesFile.isFile());
         Assert.assertTrue(modelFile.isFile());
 
@@ -103,7 +103,8 @@ public class G4toClassTaskFunctionalTest {
 
                 ID : [a-zA-Z_][a-zA-Z0-9_]* ;
                 INT : [0-9]+ ;
-                WS : [ \t\r\n]+ -> skip ;
+                WS : [ \t\r
+                ]+ -> skip ;
                 """;
     }
 }

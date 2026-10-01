@@ -2,7 +2,7 @@ package name.jurgenei.gradle.antlr;
 
 import name.jurgenei.gradle.antlr.constants.GrammarConstants;
 import name.jurgenei.gradle.antlr.constants.TimeConstants;
-import name.jurgenei.xml.sexpr.SExpressionSerializer;
+import name.jurgenei.xir.XirSerializer;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -76,10 +76,10 @@ public final class DynamicAntlrXmlAstConverter {
     private static final String LINE_COUNT_METRICS_ENABLED_PROPERTY = "xmlast.metrics.linecount.enabled";
     private static final String DECISION_PROFILE_ENABLED_PROPERTY = "xmlast.decision.profile.enabled";
     private static final String DECISION_PROFILE_TOP_N_PROPERTY = "xmlast.decision.profile.top.n";
-    private static final String SEXP_EXTENSION = ".sexpr";
+    private static final String XIR_EXTENSION = ".xir";
     private static final String SAX_LEXICAL_HANDLER_PROPERTY = "http://xml.org/sax/properties/lexical-handler";
-    private static final String SEXP_FORMAT_COMPACT = "compact";
-    private static final String SEXP_FORMAT_BEAUTIFIED = "beautified";
+    private static final String XIR_FORMAT_COMPACT = "compact";
+    private static final String XIR_FORMAT_BEAUTIFIED = "beautified";
 
     private final AtomicInteger completedFilesCounter = new AtomicInteger();
     private final Map<Integer, DecisionProfileAggregate> decisionProfileAggregates = new ConcurrentHashMap<>();
@@ -129,7 +129,7 @@ public final class DynamicAntlrXmlAstConverter {
                 startRule,
                 compression,
                 continueOnError,
-                SEXP_FORMAT_COMPACT,
+                XIR_FORMAT_COMPACT,
                 outcomeLogger);
     }
 
@@ -147,7 +147,7 @@ public final class DynamicAntlrXmlAstConverter {
             final String startRule,
             final boolean compression,
             final boolean continueOnError,
-            final String sexprFormat,
+            final String xirFormat,
             final Consumer<String> outcomeLogger) {
         validateCommonInputs(sourceRoot, sourceFiles, destinationRoot, targetExtension, classLoader, lexerClassName, parserClassName, startRule);
 
@@ -162,7 +162,7 @@ public final class DynamicAntlrXmlAstConverter {
                 startRule,
                 compression,
                 continueOnError,
-                sexprFormat,
+                xirFormat,
                 GrammarConstants.EXECUTION_MODEL_SEQUENTIAL,
                 GrammarConstants.DEFAULT_PARALLELISM,
                 outcomeLogger
@@ -212,7 +212,7 @@ public final class DynamicAntlrXmlAstConverter {
                 startRule,
                 compression,
                 continueOnError,
-                SEXP_FORMAT_COMPACT,
+                XIR_FORMAT_COMPACT,
                 executionModelName,
                 configuredParallelism,
                 outcomeLogger);
@@ -232,12 +232,12 @@ public final class DynamicAntlrXmlAstConverter {
             final String startRule,
             final boolean compression,
             final boolean continueOnError,
-            final String sexprFormat,
+            final String xirFormat,
             final String executionModelName,
             final int configuredParallelism,
             final Consumer<String> outcomeLogger) {
         validateCommonInputs(sourceRoot, sourceFiles, destinationRoot, targetExtension, classLoader, lexerClassName, parserClassName, startRule);
-        final SExpressionSerializer.OutputFormat resolvedSexprOutputFormat = resolveSexprOutputFormat(sexprFormat);
+        final XirSerializer.OutputFormat resolvedXirOutputFormat = resolveXirOutputFormat(xirFormat);
 
         // Guard: Parallelism constraints
         if (configuredParallelism < 1) {
@@ -274,7 +274,7 @@ public final class DynamicAntlrXmlAstConverter {
                         binding,
                         startRule,
                         targetExtension,
-                        resolvedSexprOutputFormat,
+                        resolvedXirOutputFormat,
                         compression,
                         continueOnError,
                         executionModel,
@@ -398,7 +398,7 @@ public final class DynamicAntlrXmlAstConverter {
             final RuntimeParserBinding binding,
             final String startRule,
             final String targetExtension,
-            final SExpressionSerializer.OutputFormat sexprOutputFormat,
+            final XirSerializer.OutputFormat xirOutputFormat,
             final boolean compression,
             final boolean continueOnError,
             final ExecutionModel executionModel,
@@ -410,7 +410,7 @@ public final class DynamicAntlrXmlAstConverter {
         if (executionModel == ExecutionModel.SEQUENTIAL || workerLimit <= 1 || jobs.size() == 1) {
             final List<ConversionOutcome> outcomes = new ArrayList<>();
             for (ConversionJob job : jobs) {
-                final ConversionOutcome outcome = processSingleFile(job, binding, startRule, targetExtension, sexprOutputFormat, compression, outcomeLogger);
+                final ConversionOutcome outcome = processSingleFile(job, binding, startRule, targetExtension, xirOutputFormat, compression, outcomeLogger);
                 outcomes.add(outcome);
                 emitOutcomeLog(outcome, outcomeLogger);
                 if (!continueOnError && !outcome.success()) {
@@ -429,7 +429,7 @@ public final class DynamicAntlrXmlAstConverter {
                 submitted.add(completion.submit(() -> {
                     permits.acquire();
                     try {
-                        return processSingleFile(job, binding, startRule, targetExtension, sexprOutputFormat, compression, outcomeLogger);
+                        return processSingleFile(job, binding, startRule, targetExtension, xirOutputFormat, compression, outcomeLogger);
                     } finally {
                         permits.release();
                     }
@@ -489,13 +489,13 @@ public final class DynamicAntlrXmlAstConverter {
             final RuntimeParserBinding binding,
             final String startRule,
             final String targetExtension,
-            final SExpressionSerializer.OutputFormat sexprOutputFormat,
+            final XirSerializer.OutputFormat xirOutputFormat,
             final boolean compression,
             final Consumer<String> outcomeLogger) {
         final long fileStartNanos = System.nanoTime();
         currentBinding.set(binding);
         try {
-            final String content = parseToTarget(job.sourceFile().toPath(), binding, startRule, targetExtension, sexprOutputFormat, compression);
+            final String content = parseToTarget(job.sourceFile().toPath(), binding, startRule, targetExtension, xirOutputFormat, compression);
             Files.writeString(job.output(), content, StandardCharsets.UTF_8);
             final long durationNanos = System.nanoTime() - fileStartNanos;
             final long lineCount = isLineCountMetricsEnabled() ? countLines(job.sourceFile().toPath()) : 0L;
@@ -938,7 +938,7 @@ public final class DynamicAntlrXmlAstConverter {
             final RuntimeParserBinding binding,
             final String startRule,
             final String targetExtension,
-            final SExpressionSerializer.OutputFormat sexprOutputFormat,
+            final XirSerializer.OutputFormat xirOutputFormat,
             final boolean compression) throws Exception {
         final Constructor<? extends Lexer> lexerCtor = binding.lexerCtor();
         final Lexer lexer = lexerCtor.newInstance(CharStreams.fromPath(sourceFile, StandardCharsets.UTF_8));
@@ -981,31 +981,31 @@ public final class DynamicAntlrXmlAstConverter {
         }
 
         final String xml = toXml(parser, parseTree, sourceFile.getFileName().toString(), startRule, compression);
-        if (isSexprTarget(targetExtension)) {
-            return xmlToSexpr(xml, sexprOutputFormat);
+        if (isXirTarget(targetExtension)) {
+            return xmlToXir(xml, xirOutputFormat);
         }
         return xml;
     }
 
-    private boolean isSexprTarget(final String targetExtension) {
-        return targetExtension != null && SEXP_EXTENSION.equalsIgnoreCase(targetExtension.trim());
+    private boolean isXirTarget(final String targetExtension) {
+        return targetExtension != null && XIR_EXTENSION.equalsIgnoreCase(targetExtension.trim());
     }
 
-    private SExpressionSerializer.OutputFormat resolveSexprOutputFormat(final String sexprFormat) {
-        if (sexprFormat == null || sexprFormat.isBlank()) {
-            return SExpressionSerializer.OutputFormat.COMPACT;
+    private XirSerializer.OutputFormat resolveXirOutputFormat(final String xirFormat) {
+        if (xirFormat == null || xirFormat.isBlank()) {
+            return XirSerializer.OutputFormat.COMPACT;
         }
-        final String normalized = sexprFormat.trim().toLowerCase(java.util.Locale.ROOT);
-        if (SEXP_FORMAT_BEAUTIFIED.equals(normalized)) {
-            return SExpressionSerializer.OutputFormat.BEAUTIFIED;
+        final String normalized = xirFormat.trim().toLowerCase(java.util.Locale.ROOT);
+        if (XIR_FORMAT_BEAUTIFIED.equals(normalized)) {
+            return XirSerializer.OutputFormat.BEAUTIFIED;
         }
-        if (SEXP_FORMAT_COMPACT.equals(normalized)) {
-            return SExpressionSerializer.OutputFormat.COMPACT;
+        if (XIR_FORMAT_COMPACT.equals(normalized)) {
+            return XirSerializer.OutputFormat.COMPACT;
         }
-        throw new IllegalArgumentException("Unsupported sexprFormat: '" + sexprFormat + "'. Expected 'compact' or 'beautified'.");
+        throw new IllegalArgumentException("Unsupported xirFormat: '" + xirFormat + "'. Expected 'compact' or 'beautified'.");
     }
 
-    private String xmlToSexpr(final String xml, final SExpressionSerializer.OutputFormat outputFormat) throws Exception {
+    private String xmlToXir(final String xml, final XirSerializer.OutputFormat outputFormat) throws Exception {
         final SAXParserFactory factory = SAXParserFactory.newInstance();
         factory.setNamespaceAware(true);
 
@@ -1020,10 +1020,10 @@ public final class DynamicAntlrXmlAstConverter {
 
         final XMLReader reader = factory.newSAXParser().getXMLReader();
         final StringWriter output = new StringWriter();
-        final SExpressionSerializer serializer = new SExpressionSerializer(
+        final XirSerializer serializer = new XirSerializer(
                 output,
                 outputFormat,
-                SExpressionSerializer.SyntaxMode.CANONICAL);
+                XirSerializer.SyntaxMode.CANONICAL);
         reader.setContentHandler(serializer);
         reader.setProperty(SAX_LEXICAL_HANDLER_PROPERTY, serializer);
         reader.parse(new InputSource(new StringReader(xml)));

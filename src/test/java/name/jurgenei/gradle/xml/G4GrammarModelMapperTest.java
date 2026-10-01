@@ -38,8 +38,8 @@ public class G4GrammarModelMapperTest {
         Assert.assertTrue(ast.inheritances().contains(new AstInheritance("FunctionCall", "Expression")));
         Assert.assertFalse(ast.classes().stream().anyMatch(c -> c.name().equals("Terminator")));
 
-        final String sexpr = new G4GrammarModelSexprWriter().write(model);
-        Assert.assertTrue(sexpr.contains("(rule assignment"));
+        final String xir = new G4GrammarModelXirWriter().write(model);
+        Assert.assertTrue(xir.contains("(rule assignment"));
     }
 
     private static String sampleGrammar() {
@@ -65,7 +65,8 @@ public class G4GrammarModelMapperTest {
 
                 ID : [a-zA-Z_][a-zA-Z0-9_]* ;
                 INT : [0-9]+ ;
-                WS : [ \t\r\n]+ -> skip ;
+                WS : [ \t\r
+                ]+ -> skip ;
                 """;
     }
 }

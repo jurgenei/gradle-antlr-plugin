@@ -36,7 +36,7 @@ Defaults:
 - `includes`: `['**/*.sql']`
 - `targetExtension`: `.xml`
 - `startRule`: `script`
-- `sexprFormat`: `compact`
+- `xirFormat`: `compact`
 
 Minimal sample:
 
@@ -57,17 +57,17 @@ tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
 S-expression sample:
 
 ```groovy
-tasks.register('sexprast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+tasks.register('xirast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
     sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
-    destinationDirectory.set(layout.buildDirectory.dir('sexpr-ast'))
+    destinationDirectory.set(layout.buildDirectory.dir('xir-ast'))
 
     parserClassName.set('name.jurgenei.parsers.PlSqlParser')
     lexerClassName.set('name.jurgenei.parsers.PlSqlLexer')
     startRule.set('script')
 
     includes.set(['**/*.sql'])
-    targetExtension.set('.sexpr')
-    sexprFormat.set('beautified') // compact|beautified
+    targetExtension.set('.xir')
+    xirFormat.set('beautified') // compact|beautified
 }
 ```
 
@@ -102,8 +102,8 @@ Preconfigured defaults:
 - `parserClassName`: `name.jurgenei.parsers.ANTLRv4Parser`
 - `lexerClassName`: `name.jurgenei.parsers.ANTLRv4Lexer`
 - `startRule`: `grammarSpec`
-- `classOutputExtension`: `.classes.sexp`
-- `modelOutputExtension`: `.model.sexp`
+- `classOutputExtension`: `.classes.xir`
+- `modelOutputExtension`: `.model.xir`
 
 Sample (file-set mode):
 
@@ -123,7 +123,7 @@ Run:
 ./gradlew xmlast
 ./gradlew antlrG4XmlAst
 ./gradlew antlrG4ToClass
-./gradlew sexprast
+./gradlew xirast
 ```
 
 ## Quick Start (No Extra Gradle Plugin Dependencies)

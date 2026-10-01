@@ -1,11 +1,10 @@
 rootProject.name = 'gradle-antlr-plugin'
 
-def astClassesCoreBuild = file('../ast-classes-core')
-if (astClassesCoreBuild.isDirectory()) {
-	includeBuild('../ast-classes-core') {
+def xirG4Build = file('../xir-g4')
+if (xirG4Build.isDirectory()) {
+	includeBuild('../xir-g4') {
 		dependencySubstitution {
-			substitute module('name.jurgenei.ast:ast-classes-core') using project(':')
+			substitute module('name.jurgenei:xir-g4') using project(':')
 		}
 	}
 }
-

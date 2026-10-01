@@ -28,9 +28,9 @@ tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
     continueOnError.set(true)
 }
 
-tasks.register('sexprast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+tasks.register('xirast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
     sourceDirectory.set(layout.projectDirectory.dir('../../src/test/resources/fixtures/mini/valid'))
-    destinationDirectory.set(layout.buildDirectory.dir('sexpr-ast-samples'))
+    destinationDirectory.set(layout.buildDirectory.dir('xir-ast-samples'))
 
     parserClassName.set('name.jurgenei.parsers.PlSqlParser')
     lexerClassName.set('name.jurgenei.parsers.PlSqlLexer')
@@ -38,7 +38,7 @@ tasks.register('sexprast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
 
 
     includes.set(['**/*.sql'])
-    targetExtension.set('.sexpr')
-    sexprFormat.set('beautified')
+    targetExtension.set('.xir')
+    xirFormat.set('beautified')
     continueOnError.set(true)
 }

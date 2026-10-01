@@ -25,7 +25,7 @@ public class LanguageTaskDefaultsTest {
         Assert.assertEquals("script", defaults.startRule());
         Assert.assertEquals(List.of("**/*.sql"), defaults.includes());
         Assert.assertEquals(".xml", defaults.targetExtension());
-        Assert.assertEquals("compact", defaults.sexprFormat());
+        Assert.assertEquals("compact", defaults.xirFormat());
     }
 
     @Test
@@ -36,7 +36,7 @@ public class LanguageTaskDefaultsTest {
                 "f.Lexer",
                 "root",
                 List.of("**/*.fed"),
-                ".sexpr",
+                ".xir",
                 "beautified");
 
         Assert.assertEquals("fedsql", defaults.grammar());
@@ -44,8 +44,8 @@ public class LanguageTaskDefaultsTest {
         Assert.assertEquals("f.Lexer", defaults.lexerClassName());
         Assert.assertEquals("root", defaults.startRule());
         Assert.assertEquals(List.of("**/*.fed"), defaults.includes());
-        Assert.assertEquals(".sexpr", defaults.targetExtension());
-        Assert.assertEquals("beautified", defaults.sexprFormat());
+        Assert.assertEquals(".xir", defaults.targetExtension());
+        Assert.assertEquals("beautified", defaults.xirFormat());
     }
 
     @Test
@@ -56,7 +56,7 @@ public class LanguageTaskDefaultsTest {
         assertNullRejected("startRule cannot be null", "g", "p", "l", null, List.of("**/*.sql"), ".xml", "compact");
         assertNullRejected("includes cannot be null", "g", "p", "l", "r", null, ".xml", "compact");
         assertNullRejected("targetExtension cannot be null", "g", "p", "l", "r", List.of("**/*.sql"), null, "compact");
-        assertNullRejected("sexprFormat cannot be null", "g", "p", "l", "r", List.of("**/*.sql"), ".xml", null);
+        assertNullRejected("xirFormat cannot be null", "g", "p", "l", "r", List.of("**/*.sql"), ".xml", null);
     }
 
     @Test
@@ -73,7 +73,7 @@ public class LanguageTaskDefaultsTest {
                 "o.Lexer",
                 "script",
                 includes,
-                ".sexpr",
+                ".xir",
                 "beautified");
 
         defaults.applyTo(task);
@@ -84,8 +84,8 @@ public class LanguageTaskDefaultsTest {
         Assert.assertEquals("o.Lexer", task.getLexerClassName().get());
         Assert.assertEquals("script", task.getStartRule().get());
         Assert.assertEquals(List.of("**/*.sql"), task.getIncludes().get());
-        Assert.assertEquals(".sexpr", task.getTargetExtension().get());
-        Assert.assertEquals("beautified", task.getSexprFormat().get());
+        Assert.assertEquals(".xir", task.getTargetExtension().get());
+        Assert.assertEquals("beautified", task.getXirFormat().get());
     }
 
     private static void assertNullRejected(
@@ -96,10 +96,10 @@ public class LanguageTaskDefaultsTest {
             final String startRule,
             final List<String> includes,
             final String targetExtension,
-            final String sexprFormat) {
+            final String xirFormat) {
         final NullPointerException ex = Assert.assertThrows(
                 NullPointerException.class,
-                () -> new LanguageTaskDefaults(grammar, parser, lexer, startRule, includes, targetExtension, sexprFormat));
+                () -> new LanguageTaskDefaults(grammar, parser, lexer, startRule, includes, targetExtension, xirFormat));
         Assert.assertEquals(expectedMessage, ex.getMessage());
     }
 

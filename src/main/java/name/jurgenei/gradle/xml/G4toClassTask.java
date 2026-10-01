@@ -1,7 +1,7 @@
 package name.jurgenei.gradle.xml;
 
 import name.jurgenei.ast.core.AstClassesPipeline;
-import name.jurgenei.ast.core.AstSexprWriter;
+import name.jurgenei.ast.core.AstXirWriter;
 import name.jurgenei.ast.core.model.AstModel;
 import name.jurgenei.ast.core.model.GrammarModel;
 import org.gradle.api.Action;
@@ -72,8 +72,8 @@ public abstract class G4toClassTask extends SourceTask {
     public abstract Property<Boolean> getFailOnError();
 
     public G4toClassTask() {
-        getClassOutputExtension().convention(".classes.sexp");
-        getModelOutputExtension().convention(".model.sexp");
+        getClassOutputExtension().convention(".classes.xir");
+        getModelOutputExtension().convention(".model.xir");
         getLexerClassName().convention("name.jurgenei.parsers.ANTLRv4Lexer");
         getParserClassName().convention("name.jurgenei.parsers.ANTLRv4Parser");
         getStartRule().convention("grammarSpec");
@@ -168,8 +168,8 @@ public abstract class G4toClassTask extends SourceTask {
                 getClass().getClassLoader());
 
         final AstModel astModel = new AstClassesPipeline().deriveFromGrammarModel(grammarModel);
-        final String classesSexpr = new AstSexprWriter().write(astModel);
-        final String grammarModelSexpr = new G4GrammarModelSexprWriter().write(grammarModel);
+        final String classesXir = new AstXirWriter().write(astModel);
+        final String grammarModelXir = new G4GrammarModelXirWriter().write(grammarModel);
 
         if (classesOut.getParentFile() != null) {
             mkdirs(classesOut.getParentFile());
@@ -178,8 +178,8 @@ public abstract class G4toClassTask extends SourceTask {
             mkdirs(modelOut.getParentFile());
         }
 
-        Files.writeString(classesOut.toPath(), classesSexpr, StandardCharsets.UTF_8);
-        Files.writeString(modelOut.toPath(), grammarModelSexpr, StandardCharsets.UTF_8);
+        Files.writeString(classesOut.toPath(), classesXir, StandardCharsets.UTF_8);
+        Files.writeString(modelOut.toPath(), grammarModelXir, StandardCharsets.UTF_8);
 
         getLogger().lifecycle("[SUCCESS] {} -> {}, {}", inputFile, classesOut, modelOut);
     }

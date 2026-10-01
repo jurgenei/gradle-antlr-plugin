@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "name.jurgenei.gradle"
-version = '0.1.6'
+version = '0.1.7'
 
 ext {
     spotbugsEngineVersion = '4.8.6'
@@ -27,14 +27,12 @@ java {
 
 repositories {
     mavenCentral()
-    gradlePluginPortal()
-    mavenLocal()
 }
 
 dependencies {
     implementation 'org.antlr:antlr4-runtime:4.13.1'
-    implementation 'name.jurgenei:xml-sax-sexpr:0.1.1'
-    implementation 'name.jurgenei.ast:ast-classes-core:0.1.0'
+    implementation 'name.jurgenei:xir-sax:0.1.2'
+    implementation 'name.jurgenei:xir-g4:0.1.0'
 
     antlr 'org.antlr:antlr4:4.13.1'
 
@@ -213,4 +211,3 @@ tasks.register('allSecurityChecks') {
     dependsOn tasks.named('dependencyCheck')
     dependsOn tasks.named('spotbugsMain')
 }
-

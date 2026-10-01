@@ -12,6 +12,7 @@ import org.junit.rules.TemporaryFolder;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class G4toClassTaskFunctionalTest {
 
@@ -56,6 +57,43 @@ public class G4toClassTaskFunctionalTest {
         Assert.assertTrue(classesText.contains("(rel Assignment target Identifier 1)"));
         Assert.assertTrue(classesText.contains("(isa FunctionCall Expression)"));
         Assert.assertFalse(classesText.contains("(class Terminator)"));
+    }
+
+    @Test
+    public void convertsSingleInputAndInfersModelOutputExtension() throws Exception {
+        final File projectDir = temporaryFolder.newFolder("functional-g4-to-class-explicit");
+        writeSettings(projectDir);
+        writeBuildFile(projectDir, """
+                plugins {
+                    id 'java'
+                    id 'name.jurgenei.gradle.antlr'
+                }
+
+                tasks.named('antlrG4ToClass', name.jurgenei.gradle.xml.G4toClassTask) {
+                    input('src/main/antlr/mini.g4')
+                    output('build/class-model/mini.classes.xir')
+                }
+                """);
+
+        final File srcDir = new File(projectDir, "src/main/antlr");
+        Assert.assertTrue(srcDir.mkdirs());
+        Files.writeString(new File(srcDir, "mini.g4").toPath(), sampleGrammar(), StandardCharsets.UTF_8);
+
+        final BuildResult result = run(projectDir, "antlrG4ToClass");
+
+        final BuildTask task = result.task(":antlrG4ToClass");
+        Assert.assertNotNull(task);
+        Assert.assertEquals(TaskOutcome.SUCCESS, task.getOutcome());
+
+        final Path classesPath = projectDir.toPath().resolve("build/class-model/mini.classes.xir");
+        final Path modelPath = projectDir.toPath().resolve("build/class-model/mini.classes.model.xir");
+        Assert.assertTrue("Expected classes output", Files.exists(classesPath));
+        Assert.assertTrue("Expected inferred model output", Files.exists(modelPath));
+
+        final String classesXir = Files.readString(classesPath, StandardCharsets.UTF_8);
+        final String modelXir = Files.readString(modelPath, StandardCharsets.UTF_8);
+        Assert.assertTrue(classesXir.contains("(class Assignment)"));
+        Assert.assertTrue(modelXir.contains("(rule assignment"));
     }
 
     private static BuildResult run(final File projectDir, final String... args) {
@@ -108,4 +146,3 @@ public class G4toClassTaskFunctionalTest {
                 """;
     }
 }
-

@@ -279,6 +279,61 @@ public class DynamicAntlrXmlAstConverterTest {
     }
 
     @Test
+    public void acceptsBlankXirFormatAsCompactDefault() throws Exception {
+        final File outputDir = temporaryFolder.newFolder("xml-ast-blank-xir-format");
+        final List<File> inputs = List.of(VALID_DIR.resolve("01_select_star.sql").toFile());
+
+        new DynamicAntlrXmlAstConverter().convertFileTreeWithStats(
+                VALID_DIR.toFile(),
+                inputs,
+                outputDir,
+                ".xir",
+                MiniLexer.class.getClassLoader(),
+                MiniLexer.class.getName(),
+                MiniParser.class.getName(),
+                "script",
+                false,
+                false,
+                "   ",
+                "SEQUENTIAL",
+                1,
+                null);
+
+        final Path xirPath = outputDir.toPath().resolve("01_select_star.xir");
+        Assert.assertTrue("Expected S-expression output", Files.exists(xirPath));
+        final String xir = Files.readString(xirPath, StandardCharsets.UTF_8);
+        Assert.assertTrue("Expected canonical S-expression document", xir.startsWith("(."));
+        Assert.assertTrue("Expected ast root node", xir.contains("(ast"));
+    }
+
+    @Test
+    public void convertsMultipleFilesWithPlatformThreadsExecutionModel() throws Exception {
+        final File outputDir = temporaryFolder.newFolder("xml-ast-platform-threads");
+        final List<File> inputs = List.of(
+                VALID_DIR.resolve("01_select_star.sql").toFile(),
+                VALID_DIR.resolve("02_select_where_order.sql").toFile());
+
+        new DynamicAntlrXmlAstConverter().convertFileTreeWithStats(
+                VALID_DIR.toFile(),
+                inputs,
+                outputDir,
+                ".xml",
+                MiniLexer.class.getClassLoader(),
+                MiniLexer.class.getName(),
+                MiniParser.class.getName(),
+                "script",
+                false,
+                false,
+                "compact",
+                "PLATFORM_THREADS",
+                2,
+                null);
+
+        Assert.assertTrue(Files.exists(outputDir.toPath().resolve("01_select_star.xml")));
+        Assert.assertTrue(Files.exists(outputDir.toPath().resolve("02_select_where_order.xml")));
+    }
+
+    @Test
     public void rejectsInvalidExecutionModelInStatsCall() throws Exception {
         final File outputDir = temporaryFolder.newFolder("xml-ast-invalid-model");
         final List<File> inputs = List.of(VALID_DIR.resolve("01_select_star.sql").toFile());
@@ -352,4 +407,3 @@ public class DynamicAntlrXmlAstConverterTest {
         return index;
     }
 }
-

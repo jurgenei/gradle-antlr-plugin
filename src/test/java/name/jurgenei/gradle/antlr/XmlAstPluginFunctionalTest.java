@@ -282,6 +282,67 @@ public class XmlAstPluginFunctionalTest {
     }
 
     @Test
+    public void rejectsInvalidXirFormatConfiguration() throws Exception {
+        final File projectDir = temporaryFolder.newFolder("functional-invalid-xir-format");
+        writeSettings(projectDir);
+        writeBuildFile(projectDir, """
+                plugins {
+                    id 'java'
+                    id 'antlr'
+                    id 'name.jurgenei.gradle.antlr'
+                }
+
+                repositories {
+                    mavenCentral()
+                }
+
+                dependencies {
+                    antlr 'org.antlr:antlr4:4.13.1'
+                    implementation 'org.antlr:antlr4-runtime:4.13.1'
+                }
+
+                generateGrammarSource {
+                    arguments += ['-package', 'e2e']
+                }
+
+                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                    sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
+                    destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
+                    parserClassName.set('e2e.MiniParser')
+                    lexerClassName.set('e2e.MiniLexer')
+                    startRule.set('script')
+                    targetExtension.set('.xir')
+                    xirFormat.set('pretty')
+                }
+                """);
+
+        writeFile(projectDir, "src/main/antlr/MiniLexer.g4", """
+                lexer grammar MiniLexer;
+
+                SELECT: 'SELECT';
+                FROM: 'FROM';
+                STAR: '*';
+                SEMI: ';';
+                IDENTIFIER: [a-zA-Z_] [a-zA-Z_0-9]*;
+                WS: [ \\t\\r\\n]+ -> skip;
+                """);
+
+        writeFile(projectDir, "src/main/antlr/MiniParser.g4", """
+                parser grammar MiniParser;
+                options { tokenVocab=MiniLexer; }
+
+                script: SELECT STAR FROM IDENTIFIER SEMI EOF;
+                """);
+
+        writeFile(projectDir, "src/main/sql/sample.sql", "SELECT * FROM employees;");
+
+        final BuildResult result = runAndFail(projectDir, "xmlast");
+        Assert.assertTrue(
+                "Expected xir format validation failure",
+                result.getOutput().contains("xirFormat must be 'compact' or 'beautified'"));
+    }
+
+    @Test
     public void failsXmlAstConversionForInvalidSqlWithParseError() throws Exception {
         final File projectDir = temporaryFolder.newFolder("functional-dynamic-parser-invalid-sql");
         writeSettings(projectDir);

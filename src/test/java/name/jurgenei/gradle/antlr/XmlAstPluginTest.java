@@ -9,6 +9,9 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import javax.inject.Inject;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 
 public class XmlAstPluginTest {
 
@@ -61,11 +64,41 @@ public class XmlAstPluginTest {
 
         Assert.assertTrue(legacyTask.getRuntimeClasspath().getFiles().containsAll(mainSourceSet.getRuntimeClasspath().getFiles()));
         Assert.assertTrue(modernTask.getRuntimeClasspath().getFiles().containsAll(mainSourceSet.getRuntimeClasspath().getFiles()));
+        Assert.assertEquals("compact", legacyTask.getXirFormat().get());
 
         Assert.assertTrue(legacyTask.getTaskDependencies().getDependencies(legacyTask)
                 .contains(project.getTasks().named("classes").get()));
         Assert.assertTrue(modernTask.getTaskDependencies().getDependencies(modernTask)
                 .contains(project.getTasks().named("classes").get()));
+    }
+
+    @Test
+    public void resolvesLegacyTaskCatalogEntryWithRecordAccessors() throws Exception {
+        final Project project = ProjectBuilder.builder().build();
+        project.getPluginManager().apply("java");
+
+        new XmlAstPlugin().apply(project);
+        final TestLegacyXmlAstTask legacyTask = project.getTasks().register("legacyXmlAstForCatalog", TestLegacyXmlAstTask.class).get();
+
+        final File catalog = File.createTempFile("xmlast-catalog", ".xml");
+        catalog.deleteOnExit();
+        Files.writeString(catalog.toPath(), """
+                <catalog>
+                  <grammar name="mini" runtimeGrammar="oracle" parser="e2e.MiniParser" lexer="e2e.MiniLexer" start-rule="root"/>
+                </catalog>
+                """, StandardCharsets.UTF_8);
+
+        legacyTask.getCatalogFile().set(catalog);
+        legacyTask.getCatalogGrammar().set("mini");
+
+        final var method = XmlAstTask.class.getDeclaredMethod("resolveEffectiveConfig");
+        method.setAccessible(true);
+        final Object resolved = method.invoke(legacyTask);
+        final Class<?> type = resolved.getClass();
+
+        Assert.assertEquals("e2e.MiniParser", type.getMethod("parserClassName").invoke(resolved));
+        Assert.assertEquals("e2e.MiniLexer", type.getMethod("lexerClassName").invoke(resolved));
+        Assert.assertEquals("root", type.getMethod("startRule").invoke(resolved));
     }
 
     public abstract static class TestLegacyXmlAstTask extends XmlAstTask {
@@ -82,4 +115,3 @@ public class XmlAstPluginTest {
         }
     }
 }
-

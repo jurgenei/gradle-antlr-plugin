@@ -34,7 +34,7 @@ import java.util.List;
  * Converts ANTLRv4 grammar files into GrammarModel and AST-Schema S-expression files.
  */
 @DisableCachingByDefault(because = "Parses grammar files and writes derived model artifacts")
-public abstract class G4toClassTask extends SourceTask {
+public abstract class G4toSchemaTask extends SourceTask {
 
     @Optional
     @OutputDirectory
@@ -71,7 +71,7 @@ public abstract class G4toClassTask extends SourceTask {
     @Input
     public abstract Property<Boolean> getFailOnError();
 
-    public G4toClassTask() {
+    public G4toSchemaTask() {
         getSchemaOutputExtension().convention(".schema.xir");
         getModelOutputExtension().convention(".model.xir");
         getLexerClassName().convention("name.jurgenei.parsers.ANTLRv4Lexer");

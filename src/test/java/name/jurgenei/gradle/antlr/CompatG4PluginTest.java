@@ -1,6 +1,6 @@
 package name.jurgenei.gradle.antlr;
 
-import name.jurgenei.gradle.xml.G4toClassTask;
+import name.jurgenei.gradle.xml.G4toSchemaTask;
 import org.gradle.api.Project;
 import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.Assert;
@@ -43,7 +43,7 @@ public class CompatG4PluginTest {
 
         new CompatG4Plugin().apply(project);
 
-        final G4toClassTask task = (G4toClassTask) project.getTasks().getByName("g4ToSchema");
+        final G4toSchemaTask task = (G4toSchemaTask) project.getTasks().getByName("g4ToSchema");
         Assert.assertEquals(".schema.xir", task.getSchemaOutputExtension().get());
         Assert.assertEquals(".model.xir", task.getModelOutputExtension().get());
         Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Parser", task.getParserClassName().get());

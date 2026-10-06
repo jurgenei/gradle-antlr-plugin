@@ -12,7 +12,7 @@
 
 - `xmlast` task (`name.jurgenei.gradle.antlr.XmlAstGradleTask`)
 - `antlrG4XmlAst` task (`name.jurgenei.gradle.antlr.XmlAstG4GradleTask`)
-- `antlrG4ToSchema` task (`name.jurgenei.gradle.xml.G4toClassTask`)
+- `antlrG4ToSchema` task (`name.jurgenei.gradle.xml.G4toSchemaTask`)
 - runtime classpath wiring from Java `main` source set
 - `classes` dependency wiring for `XmlAstGradleTask` and `XmlAstTask`
 
@@ -106,7 +106,7 @@ Preconfigured defaults:
 Sample (file-set mode):
 
 ```groovy
-tasks.named('antlrG4ToSchema', name.jurgenei.gradle.xml.G4toClassTask) {
+tasks.named('antlrG4ToSchema', name.jurgenei.gradle.xml.G4toSchemaTask) {
     fileset('src/main/antlr') {
         include '**/*.g4'
     }

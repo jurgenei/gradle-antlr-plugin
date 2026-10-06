@@ -11,7 +11,7 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
-public class G4toClassTaskTest {
+public class G4toSchemaTaskTest {
 
     @Rule
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
@@ -19,7 +19,7 @@ public class G4toClassTaskTest {
     @Test
     public void convertsExplicitInputToClassesAndModelXir() throws Exception {
         final Project project = ProjectBuilder.builder().build();
-        final TestG4toClassTask task = project.getTasks().register("g4UnitTask", TestG4toClassTask.class).get();
+        final TestG4toSchemaTask task = project.getTasks().register("g4UnitTask", TestG4toSchemaTask.class).get();
 
         final File sourceDir = temporaryFolder.newFolder("g4-source");
         final File grammarFile = new File(sourceDir, "mini.g4");
@@ -68,6 +68,6 @@ public class G4toClassTaskTest {
                 """;
     }
 
-    public abstract static class TestG4toClassTask extends G4toClassTask {
+    public abstract static class TestG4toSchemaTask extends G4toSchemaTask {
     }
 }

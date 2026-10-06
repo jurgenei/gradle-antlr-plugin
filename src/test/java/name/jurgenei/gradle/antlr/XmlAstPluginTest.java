@@ -1,6 +1,6 @@
 package name.jurgenei.gradle.antlr;
 
-import name.jurgenei.gradle.xml.G4toClassTask;
+import name.jurgenei.gradle.xml.G4toSchemaTask;
 import org.gradle.api.Project;
 import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.tasks.SourceSet;
@@ -41,10 +41,10 @@ public class XmlAstPluginTest {
         Assert.assertEquals("grammarSpec", g4Task.getStartRule().get());
         Assert.assertTrue(g4Task.getTaskDependencies().getDependencies(g4Task).contains(project.getTasks().named("classes").get()));
 
-        final G4toClassTask g4ToClassTask = (G4toClassTask) project.getTasks().getByName("antlrG4ToSchema");
-        Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Parser", g4ToClassTask.getParserClassName().get());
-        Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Lexer", g4ToClassTask.getLexerClassName().get());
-        Assert.assertEquals("grammarSpec", g4ToClassTask.getStartRule().get());
+        final G4toSchemaTask g4ToSchemaTask = (G4toSchemaTask) project.getTasks().getByName("antlrG4ToSchema");
+        Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Parser", g4ToSchemaTask.getParserClassName().get());
+        Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Lexer", g4ToSchemaTask.getLexerClassName().get());
+        Assert.assertEquals("grammarSpec", g4ToSchemaTask.getStartRule().get());
     }
 
     @Test

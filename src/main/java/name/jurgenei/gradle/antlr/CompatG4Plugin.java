@@ -1,6 +1,6 @@
 package name.jurgenei.gradle.antlr;
 
-import name.jurgenei.gradle.xml.G4toClassTask;
+import name.jurgenei.gradle.xml.G4toSchemaTask;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 
@@ -19,7 +19,7 @@ public final class CompatG4Plugin implements Plugin<Project> {
                 "Convert ANTLRv4 grammar files to XML AST output.");
         LanguagePluginSupport.wireJavaRuntimeClasspath(project, XmlAstG4GradleTask.class);
 
-        project.getTasks().register("g4ToSchema", G4toClassTask.class, task -> {
+        project.getTasks().register("g4ToSchema", G4toSchemaTask.class, task -> {
             task.setGroup("xmlast");
             task.setDescription("Convert ANTLRv4 grammar files to GrammarModel and AST-Schema output.");
         });

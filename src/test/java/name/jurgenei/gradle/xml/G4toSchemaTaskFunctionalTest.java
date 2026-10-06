@@ -14,7 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class G4toClassTaskFunctionalTest {
+public class G4toSchemaTaskFunctionalTest {
 
     @Rule
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
@@ -29,7 +29,7 @@ public class G4toClassTaskFunctionalTest {
                     id 'name.jurgenei.gradle.antlr'
                 }
 
-                tasks.named('antlrG4ToSchema', name.jurgenei.gradle.xml.G4toClassTask) {
+                tasks.named('antlrG4ToSchema', name.jurgenei.gradle.xml.G4toSchemaTask) {
                     fileset('src/main/antlr') {
                         include '**/*.g4'
                     }
@@ -69,7 +69,7 @@ public class G4toClassTaskFunctionalTest {
                     id 'name.jurgenei.gradle.antlr'
                 }
 
-                tasks.named('antlrG4ToSchema', name.jurgenei.gradle.xml.G4toClassTask) {
+                tasks.named('antlrG4ToSchema', name.jurgenei.gradle.xml.G4toSchemaTask) {
                     input('src/main/antlr/mini.g4')
                     output('build/class-model/mini.schema.xir')
                 }

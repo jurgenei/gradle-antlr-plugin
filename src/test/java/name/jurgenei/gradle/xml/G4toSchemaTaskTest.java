@@ -11,7 +11,7 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
-public class G4toClassTaskTest {
+public class G4toSchemaTaskTest {
 
     @Rule
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
@@ -19,24 +19,24 @@ public class G4toClassTaskTest {
     @Test
     public void convertsExplicitInputToClassesAndModelXir() throws Exception {
         final Project project = ProjectBuilder.builder().build();
-        final TestG4toClassTask task = project.getTasks().register("g4UnitTask", TestG4toClassTask.class).get();
+        final TestG4toSchemaTask task = project.getTasks().register("g4UnitTask", TestG4toSchemaTask.class).get();
 
         final File sourceDir = temporaryFolder.newFolder("g4-source");
         final File grammarFile = new File(sourceDir, "mini.g4");
         Files.writeString(grammarFile.toPath(), sampleGrammar(), StandardCharsets.UTF_8);
 
         final File outputDir = temporaryFolder.newFolder("g4-out");
-        final File classesOut = new File(outputDir, "mini.classes.xir");
+        final File schemaOut = new File(outputDir, "mini.schema.xir");
         final File modelOut = new File(outputDir, "mini.model.xir");
 
         task.input(grammarFile);
-        task.output(classesOut);
+        task.output(schemaOut);
         task.modelOutput(modelOut);
         task.convertAll();
 
-        Assert.assertTrue(classesOut.isFile());
+        Assert.assertTrue(schemaOut.isFile());
         Assert.assertTrue(modelOut.isFile());
-        Assert.assertTrue(Files.readString(classesOut.toPath(), StandardCharsets.UTF_8).contains("(class Assignment)"));
+        Assert.assertTrue(Files.readString(schemaOut.toPath(), StandardCharsets.UTF_8).contains("(class Assignment)"));
         Assert.assertTrue(Files.readString(modelOut.toPath(), StandardCharsets.UTF_8).contains("(rule assignment"));
     }
 
@@ -68,6 +68,6 @@ public class G4toClassTaskTest {
                 """;
     }
 
-    public abstract static class TestG4toClassTask extends G4toClassTask {
+    public abstract static class TestG4toSchemaTask extends G4toSchemaTask {
     }
 }

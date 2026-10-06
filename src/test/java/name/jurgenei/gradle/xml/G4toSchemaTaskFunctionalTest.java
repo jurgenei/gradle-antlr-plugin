@@ -14,14 +14,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class G4toClassTaskFunctionalTest {
+public class G4toSchemaTaskFunctionalTest {
 
     @Rule
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
     @Test
     public void convertsFileTreeUsingFileset() throws Exception {
-        final File projectDir = temporaryFolder.newFolder("functional-g4-to-class-fileset");
+        final File projectDir = temporaryFolder.newFolder("functional-g4-to-schema-fileset");
         writeSettings(projectDir);
         writeBuildFile(projectDir, """
                 plugins {
@@ -29,7 +29,7 @@ public class G4toClassTaskFunctionalTest {
                     id 'name.jurgenei.gradle.antlr'
                 }
 
-                tasks.named('antlrG4ToClass', name.jurgenei.gradle.xml.G4toClassTask) {
+                tasks.named('antlrG4ToSchema', name.jurgenei.gradle.xml.G4toSchemaTask) {
                     fileset('src/main/antlr') {
                         include '**/*.g4'
                     }
@@ -41,27 +41,27 @@ public class G4toClassTaskFunctionalTest {
         Assert.assertTrue(srcDir.mkdirs());
         Files.writeString(new File(srcDir, "mini.g4").toPath(), sampleGrammar(), StandardCharsets.UTF_8);
 
-        final BuildResult result = run(projectDir, "antlrG4ToClass");
+        final BuildResult result = run(projectDir, "antlrG4ToSchema");
 
-        final BuildTask task = result.task(":antlrG4ToClass");
+        final BuildTask task = result.task(":antlrG4ToSchema");
         Assert.assertNotNull(task);
         Assert.assertEquals(TaskOutcome.SUCCESS, task.getOutcome());
 
-        final File classesFile = new File(projectDir, "build/class-model/mini.classes.xir");
+        final File schemaFile = new File(projectDir, "build/class-model/mini.schema.xir");
         final File modelFile = new File(projectDir, "build/class-model/mini.model.xir");
-        Assert.assertTrue(classesFile.isFile());
+        Assert.assertTrue(schemaFile.isFile());
         Assert.assertTrue(modelFile.isFile());
 
-        final String classesText = Files.readString(classesFile.toPath(), StandardCharsets.UTF_8);
-        Assert.assertTrue(classesText.contains("(class Assignment)"));
-        Assert.assertTrue(classesText.contains("(rel Assignment target Identifier 1)"));
-        Assert.assertTrue(classesText.contains("(isa FunctionCall Expression)"));
-        Assert.assertFalse(classesText.contains("(class Terminator)"));
+        final String schemaText = Files.readString(schemaFile.toPath(), StandardCharsets.UTF_8);
+        Assert.assertTrue(schemaText.contains("(class Assignment)"));
+        Assert.assertTrue(schemaText.contains("(rel Assignment target Identifier 1)"));
+        Assert.assertTrue(schemaText.contains("(isa FunctionCall Expression)"));
+        Assert.assertFalse(schemaText.contains("(class Terminator)"));
     }
 
     @Test
     public void convertsSingleInputAndInfersModelOutputExtension() throws Exception {
-        final File projectDir = temporaryFolder.newFolder("functional-g4-to-class-explicit");
+        final File projectDir = temporaryFolder.newFolder("functional-g4-to-schema-explicit");
         writeSettings(projectDir);
         writeBuildFile(projectDir, """
                 plugins {
@@ -69,9 +69,9 @@ public class G4toClassTaskFunctionalTest {
                     id 'name.jurgenei.gradle.antlr'
                 }
 
-                tasks.named('antlrG4ToClass', name.jurgenei.gradle.xml.G4toClassTask) {
+                tasks.named('antlrG4ToSchema', name.jurgenei.gradle.xml.G4toSchemaTask) {
                     input('src/main/antlr/mini.g4')
-                    output('build/class-model/mini.classes.xir')
+                    output('build/class-model/mini.schema.xir')
                 }
                 """);
 
@@ -79,20 +79,20 @@ public class G4toClassTaskFunctionalTest {
         Assert.assertTrue(srcDir.mkdirs());
         Files.writeString(new File(srcDir, "mini.g4").toPath(), sampleGrammar(), StandardCharsets.UTF_8);
 
-        final BuildResult result = run(projectDir, "antlrG4ToClass");
+        final BuildResult result = run(projectDir, "antlrG4ToSchema");
 
-        final BuildTask task = result.task(":antlrG4ToClass");
+        final BuildTask task = result.task(":antlrG4ToSchema");
         Assert.assertNotNull(task);
         Assert.assertEquals(TaskOutcome.SUCCESS, task.getOutcome());
 
-        final Path classesPath = projectDir.toPath().resolve("build/class-model/mini.classes.xir");
-        final Path modelPath = projectDir.toPath().resolve("build/class-model/mini.classes.model.xir");
-        Assert.assertTrue("Expected classes output", Files.exists(classesPath));
+        final Path schemaPath = projectDir.toPath().resolve("build/class-model/mini.schema.xir");
+        final Path modelPath = projectDir.toPath().resolve("build/class-model/mini.schema.model.xir");
+        Assert.assertTrue("Expected schema output", Files.exists(schemaPath));
         Assert.assertTrue("Expected inferred model output", Files.exists(modelPath));
 
-        final String classesXir = Files.readString(classesPath, StandardCharsets.UTF_8);
+        final String schemaXir = Files.readString(schemaPath, StandardCharsets.UTF_8);
         final String modelXir = Files.readString(modelPath, StandardCharsets.UTF_8);
-        Assert.assertTrue(classesXir.contains("(class Assignment)"));
+        Assert.assertTrue(schemaXir.contains("(class Assignment)"));
         Assert.assertTrue(modelXir.contains("(rule assignment"));
     }
 
@@ -107,7 +107,7 @@ public class G4toClassTaskFunctionalTest {
     private static void writeSettings(final File projectDir) throws Exception {
         Files.writeString(
                 projectDir.toPath().resolve("settings.gradle"),
-                "rootProject.name = 'g4-to-class-functional-test'\n",
+                "rootProject.name = 'g4-to-schema-functional-test'\n",
                 StandardCharsets.UTF_8);
     }
 

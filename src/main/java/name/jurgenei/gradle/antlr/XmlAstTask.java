@@ -50,7 +50,7 @@ public abstract class XmlAstTask extends DefaultTask {
     private final DirectoryProperty destinationDirectory;
     private final Property<String> grammar;
     private final Property<String> targetExtension;
-    private final Property<String> xirFormat;
+    private final Property<String> outputFormat;
     private final Property<Integer> parallelism;
     private final Property<String> executionModel;
     private final ListProperty<String> includes;
@@ -73,7 +73,7 @@ public abstract class XmlAstTask extends DefaultTask {
         destinationDirectory = objects.directoryProperty();
         grammar = objects.property(String.class).convention("oracle");
         targetExtension = objects.property(String.class).convention(".xml");
-        xirFormat = objects.property(String.class).convention("compact");
+        outputFormat = objects.property(String.class).convention("compact");
         parallelism = objects.property(Integer.class).convention(1);
         executionModel = objects.property(String.class).convention("SEQUENTIAL");
         includes = objects.listProperty(String.class).convention(List.of("**/*.sql"));
@@ -134,8 +134,8 @@ public abstract class XmlAstTask extends DefaultTask {
      * @return S-expression output format property.
      */
     @Input
-    public Property<String> getXirFormat() {
-        return xirFormat;
+    public Property<String> getOutputFormat() {
+        return outputFormat;
     }
 
     /**
@@ -298,7 +298,7 @@ public abstract class XmlAstTask extends DefaultTask {
                             resolvedConfig.startRule(),
                             compression.get(),
                             true,
-                            xirFormat.get(),
+                            outputFormat.get(),
                             m -> getLogger().lifecycle(m));
                 }
             }
@@ -408,4 +408,3 @@ public abstract class XmlAstTask extends DefaultTask {
         return false;
     }
 }
-

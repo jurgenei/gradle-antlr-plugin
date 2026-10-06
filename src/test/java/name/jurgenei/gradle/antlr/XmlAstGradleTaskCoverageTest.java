@@ -22,7 +22,7 @@ public class XmlAstGradleTaskCoverageTest {
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
     @Test
-    public void convertsUsingConfiguredXirFormat() throws Exception {
+    public void convertsUsingConfiguredOutputFormat() throws Exception {
         final TestXmlAstGradleTask task = newTask("modern-xmlast-xir");
         final File sourceDir = temporaryFolder.newFolder("modern-source");
         final File destinationDir = temporaryFolder.newFolder("modern-out");
@@ -35,7 +35,7 @@ public class XmlAstGradleTaskCoverageTest {
         task.getLexerClassName().set(MiniLexer.class.getName());
         task.getStartRule().set("script");
         task.getTargetExtension().set(".xir");
-        task.getXirFormat().set("beautified");
+        task.getOutputFormat().set("beautified");
         task.getRuntimeClasspath().from(runtimeLocation(MiniParser.class));
 
         task.convert();
@@ -47,7 +47,7 @@ public class XmlAstGradleTaskCoverageTest {
     }
 
     @Test
-    public void rejectsInvalidXirFormatDuringConversionValidation() throws Exception {
+    public void rejectsInvalidOutputFormatDuringConversionValidation() throws Exception {
         final TestXmlAstGradleTask task = newTask("modern-xmlast-invalid-format");
         final File sourceDir = temporaryFolder.newFolder("modern-source-invalid");
         final File destinationDir = temporaryFolder.newFolder("modern-out-invalid");
@@ -60,10 +60,10 @@ public class XmlAstGradleTaskCoverageTest {
         task.getLexerClassName().set(MiniLexer.class.getName());
         task.getStartRule().set("script");
         task.getTargetExtension().set(".xir");
-        task.getXirFormat().set("pretty");
+        task.getOutputFormat().set("pretty");
 
         final GradleException ex = Assert.assertThrows(GradleException.class, task::convert);
-        Assert.assertTrue(ex.getMessage().contains("xirFormat must be 'compact' or 'beautified'"));
+        Assert.assertTrue(ex.getMessage().contains("outputFormat must be 'compact' or 'beautified'"));
     }
 
     @Test

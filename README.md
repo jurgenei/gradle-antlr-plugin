@@ -7,23 +7,21 @@
 [![Coverage CI](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/coverage.yml/badge.svg)](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/coverage.yml)
 [![Coverage](https://codecov.io/gh/jurgenei/gradle-antlr-plugin/graph/badge.svg)](https://codecov.io/gh/jurgenei/gradle-antlr-plugin)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Java](https://img.shields.io/badge/java-21+-green.svg)](https://www.oracle.com/java/)
-[![Gradle](https://img.shields.io/badge/gradle-8+-blue.svg)](https://gradle.org/)
 
-## What Plugin Adds
+## What plugin adds
 
 - `xmlast` task (`name.jurgenei.gradle.antlr.XmlAstGradleTask`)
 - `antlrG4XmlAst` task (`name.jurgenei.gradle.antlr.XmlAstG4GradleTask`)
-- `antlrG4ToClass` task (`name.jurgenei.gradle.xml.G4toClassTask`)
+- `antlrG4ToSchema` task (`name.jurgenei.gradle.xml.G4toSchemaTask`)
 - runtime classpath wiring from Java `main` source set
 - `classes` dependency wiring for `XmlAstGradleTask` and `XmlAstTask`
 
 Legacy compatibility plugin id also available:
 
 - `name.jurgenei.gradle.antlr.g4`
-- adds `g4XmlAst` and `g4ToClass`
+- adds `g4XmlAst` and `g4ToSchema`
 
-## Task Catalog
+## Task catalog
 
 ### `xmlast`
 
@@ -36,7 +34,7 @@ Defaults:
 - `includes`: `['**/*.sql']`
 - `targetExtension`: `.xml`
 - `startRule`: `script`
-- `xirFormat`: `compact`
+- `outputFormat`: `compact`
 
 Minimal sample:
 
@@ -67,7 +65,7 @@ tasks.register('xirast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
 
     includes.set(['**/*.sql'])
     targetExtension.set('.xir')
-    xirFormat.set('beautified') // compact|beautified
+    outputFormat.set('beautified') // compact|beautified
 }
 ```
 
@@ -93,22 +91,22 @@ tasks.named('antlrG4XmlAst', name.jurgenei.gradle.antlr.XmlAstG4GradleTask) {
 }
 ```
 
-### `antlrG4ToClass`
+### `antlrG4ToSchema`
 
-Purpose: derive grammar model + AST classes S-expression artifacts from `.g4` files.
+Purpose: derive grammar model + AST schema S-expression artifacts from `.g4` files.
 
 Preconfigured defaults:
 
 - `parserClassName`: `name.jurgenei.parsers.ANTLRv4Parser`
 - `lexerClassName`: `name.jurgenei.parsers.ANTLRv4Lexer`
 - `startRule`: `grammarSpec`
-- `classOutputExtension`: `.classes.xir`
+- `schemaOutputExtension`: `.schema.xir`
 - `modelOutputExtension`: `.model.xir`
 
 Sample (file-set mode):
 
 ```groovy
-tasks.named('antlrG4ToClass', name.jurgenei.gradle.xml.G4toClassTask) {
+tasks.named('antlrG4ToSchema', name.jurgenei.gradle.xml.G4toSchemaTask) {
     fileset('src/main/antlr') {
         include '**/*.g4'
     }
@@ -122,11 +120,11 @@ Run:
 ```bash
 ./gradlew xmlast
 ./gradlew antlrG4XmlAst
-./gradlew antlrG4ToClass
+./gradlew antlrG4ToSchema
 ./gradlew xirast
 ```
 
-## Quick Start (No Extra Gradle Plugin Dependencies)
+## Quick start
 
 Sample uses only:
 
@@ -138,7 +136,7 @@ Parser/Lexer classes come from regular runtime dependency jar. No grammar-specif
 ```groovy
 plugins {
     id 'java'
-    id 'name.jurgenei.gradle.antlr' version '0.1.6'
+    id 'name.jurgenei.gradle.antlr'
 }
 
 repositories {
@@ -147,11 +145,10 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.antlr:antlr4-runtime:4.13.2'
+    implementation 'org.antlr:antlr4-runtime'
 
-    // Example: parser jar published independently.
-    // Replace with your own parser artifact.
-    implementation 'name.jurgenei.gradle:gradle-antlr-plsql-plugin:0.1.3'
+    // Example parser jar. Replace with your own parser artifact.
+    implementation 'name.jurgenei.gradle:gradle-antlr-plsql-plugin'
 }
 
 tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
@@ -174,14 +171,13 @@ Run:
 ./gradlew xmlast
 ```
 
-## G4 Compatibility ID
+## G4 compatibility id
 
-Use only when you need `g4XmlAst` or `g4ToClass` tasks from legacy id:
+Use only when you need `g4XmlAst` or `g4ToSchema` tasks from legacy id:
 
 ```groovy
 plugins {
     id 'java'
-    id 'name.jurgenei.gradle.antlr.g4' version '0.1.6'
+    id 'name.jurgenei.gradle.antlr.g4'
 }
 ```
-

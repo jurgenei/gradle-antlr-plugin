@@ -31,10 +31,10 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Converts ANTLRv4 grammar files into GrammarModel and AST-Classes S-expression files.
+ * Converts ANTLRv4 grammar files into GrammarModel and AST-Schema S-expression files.
  */
 @DisableCachingByDefault(because = "Parses grammar files and writes derived model artifacts")
-public abstract class G4toClassTask extends SourceTask {
+public abstract class G4toSchemaTask extends SourceTask {
 
     @Optional
     @OutputDirectory
@@ -54,7 +54,7 @@ public abstract class G4toClassTask extends SourceTask {
     public abstract RegularFileProperty getModelOutputFile();
 
     @Input
-    public abstract Property<String> getClassOutputExtension();
+    public abstract Property<String> getSchemaOutputExtension();
 
     @Input
     public abstract Property<String> getModelOutputExtension();
@@ -71,8 +71,8 @@ public abstract class G4toClassTask extends SourceTask {
     @Input
     public abstract Property<Boolean> getFailOnError();
 
-    public G4toClassTask() {
-        getClassOutputExtension().convention(".classes.xir");
+    public G4toSchemaTask() {
+        getSchemaOutputExtension().convention(".schema.xir");
         getModelOutputExtension().convention(".model.xir");
         getLexerClassName().convention("name.jurgenei.parsers.ANTLRv4Lexer");
         getParserClassName().convention("name.jurgenei.parsers.ANTLRv4Parser");
@@ -132,9 +132,9 @@ public abstract class G4toClassTask extends SourceTask {
             try {
                 final Path relative = sourceRoot.relativize(inputFile.toPath());
                 final String relativeNoExt = stripExtension(relative.toString());
-                final File classesOut = new File(outputRoot, relativeNoExt + getClassOutputExtension().get());
+                final File schemaOut = new File(outputRoot, relativeNoExt + getSchemaOutputExtension().get());
                 final File modelOut = new File(outputRoot, relativeNoExt + getModelOutputExtension().get());
-                convertOne(inputFile, classesOut, modelOut);
+                convertOne(inputFile, schemaOut, modelOut);
             } catch (Exception ex) {
                 handleFailure(inputFile, ex);
             }
@@ -143,18 +143,18 @@ public abstract class G4toClassTask extends SourceTask {
 
     private void convertExplicit() {
         final File input = getInputFile().get().getAsFile();
-        final File classesOutput = getOutputFile().get().getAsFile();
+        final File schemaOutput = getOutputFile().get().getAsFile();
         final File modelOutput = getModelOutputFile().isPresent()
                 ? getModelOutputFile().get().getAsFile()
-                : new File(replaceExtension(classesOutput.getPath(), getModelOutputExtension().get()));
+                : new File(replaceExtension(schemaOutput.getPath(), getModelOutputExtension().get()));
         try {
-            convertOne(input, classesOutput, modelOutput);
+            convertOne(input, schemaOutput, modelOutput);
         } catch (Exception ex) {
             handleFailure(input, ex);
         }
     }
 
-    private void convertOne(final File inputFile, final File classesOut, final File modelOut) throws IOException {
+    private void convertOne(final File inputFile, final File schemaOut, final File modelOut) throws IOException {
         if (!inputFile.isFile()) {
             throw new GradleException("Input file does not exist: " + inputFile);
         }
@@ -168,20 +168,20 @@ public abstract class G4toClassTask extends SourceTask {
                 getClass().getClassLoader());
 
         final AstModel astModel = new AstClassesPipeline().deriveFromGrammarModel(grammarModel);
-        final String classesXir = new AstXirWriter().write(astModel);
+        final String schemaXir = new AstXirWriter().write(astModel);
         final String grammarModelXir = new G4GrammarModelXirWriter().write(grammarModel);
 
-        if (classesOut.getParentFile() != null) {
-            mkdirs(classesOut.getParentFile());
+        if (schemaOut.getParentFile() != null) {
+            mkdirs(schemaOut.getParentFile());
         }
         if (modelOut.getParentFile() != null) {
             mkdirs(modelOut.getParentFile());
         }
 
-        Files.writeString(classesOut.toPath(), classesXir, StandardCharsets.UTF_8);
+        Files.writeString(schemaOut.toPath(), schemaXir, StandardCharsets.UTF_8);
         Files.writeString(modelOut.toPath(), grammarModelXir, StandardCharsets.UTF_8);
 
-        getLogger().lifecycle("[SUCCESS] {} -> {}, {}", inputFile, classesOut, modelOut);
+        getLogger().lifecycle("[SUCCESS] {} -> {}, {}", inputFile, schemaOut, modelOut);
     }
 
     private void handleFailure(final File inputFile, final Exception ex) {
@@ -238,4 +238,3 @@ public abstract class G4toClassTask extends SourceTask {
         return path + extension;
     }
 }
-

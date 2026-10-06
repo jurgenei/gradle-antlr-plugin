@@ -54,7 +54,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     private final DirectoryProperty destinationDirectory;
     private final Property<String> grammar;
     private final Property<String> targetExtension;
-    private final Property<String> xirFormat;
+    private final Property<String> outputFormat;
     private final Property<Integer> parallelism;
     private final Property<String> executionModel;
     private final ListProperty<String> includes;
@@ -91,7 +91,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         destinationDirectory = objects.directoryProperty();
         grammar = objects.property(String.class).convention(GrammarConstants.DEFAULT_GRAMMAR);
         targetExtension = objects.property(String.class).convention(GrammarConstants.DEFAULT_FILE_EXTENSION);
-        xirFormat = objects.property(String.class).convention("compact");
+        outputFormat = objects.property(String.class).convention("compact");
         parallelism = objects.property(Integer.class).convention(GrammarConstants.DEFAULT_PARALLELISM);
         executionModel = objects.property(String.class).convention(GrammarConstants.EXECUTION_MODEL_SEQUENTIAL);
         includes = objects.listProperty(String.class).convention(List.of(GrammarConstants.DEFAULT_INCLUDE_PATTERN));
@@ -171,8 +171,8 @@ public abstract class XmlAstGradleTask extends DefaultTask {
      * @return S-expression output format property.
      */
     @Input
-    public Property<String> getXirFormat() {
-        return xirFormat;
+    public Property<String> getOutputFormat() {
+        return outputFormat;
     }
 
     /**
@@ -460,7 +460,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         // Validate and resolve all configurations upfront
         final ResolvedParserConfig resolvedConfig = resolveEffectiveConfig();
         final String extension = validateAndGetExtension();
-        final String xirFormatValue = validateAndGetXirFormat();
+        final String outputFormatValue = validateAndGetOutputFormat();
         final int parallelismValue = validateAndGetParallelism();
         final String executionModelValue = validateAndGetExecutionModel();
 
@@ -475,7 +475,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         }
 
         // Execute conversion and handle results
-        performConversion(sourceDir, destinationDir, resolvedConfig, extension, xirFormatValue, parallelismValue,
+        performConversion(sourceDir, destinationDir, resolvedConfig, extension, outputFormatValue, parallelismValue,
                          executionModelValue, jobs, runStartNanos);
     }
 
@@ -488,7 +488,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
             final File destinationDir,
             final ResolvedParserConfig resolvedConfig,
             final String extension,
-            final String xirFormatValue,
+            final String outputFormatValue,
             final int parallelismValue,
             final String executionModelValue,
             final List<File> jobs,
@@ -537,7 +537,7 @@ public abstract class XmlAstGradleTask extends DefaultTask {
                         resolvedConfig.startRule(),
                         compression.get(),
                         continueOnError.get(),
-                        xirFormatValue,
+                        outputFormatValue,
                         executionModelValue,
                         parallelismValue,
                         line -> getLogger().lifecycle(line));
@@ -650,11 +650,11 @@ public abstract class XmlAstGradleTask extends DefaultTask {
     /**
      * Validates configured S-expression output format.
      */
-    private String validateAndGetXirFormat() {
-        final String configured = xirFormat.getOrElse("compact");
+    private String validateAndGetOutputFormat() {
+        final String configured = outputFormat.getOrElse("compact");
         final String normalized = configured.trim().toLowerCase(Locale.ROOT);
         if (!"compact".equals(normalized) && !"beautified".equals(normalized)) {
-            throw new GradleException("xirFormat must be 'compact' or 'beautified', got: " + configured);
+            throw new GradleException("outputFormat must be 'compact' or 'beautified', got: " + configured);
         }
         return normalized;
     }
@@ -1005,4 +1005,3 @@ public abstract class XmlAstGradleTask extends DefaultTask {
         return compact.substring(0, max - 3) + "...";
     }
 }
-

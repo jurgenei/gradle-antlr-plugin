@@ -34,17 +34,17 @@ public class CompatG4PluginTest {
         Assert.assertEquals("grammarSpec", task.getStartRule().get());
         Assert.assertTrue(task.getIncludes().get().contains("**/*.g4"));
         Assert.assertEquals(".xml", task.getTargetExtension().get());
-        Assert.assertEquals("compact", task.getXirFormat().get());
+        Assert.assertEquals("compact", task.getOutputFormat().get());
     }
 
     @Test
-    public void registersG4ToClassTaskWithDefaults() {
+    public void registersG4ToSchemaTaskWithDefaults() {
         final Project project = ProjectBuilder.builder().build();
 
         new CompatG4Plugin().apply(project);
 
-        final G4toClassTask task = (G4toClassTask) project.getTasks().getByName("g4ToClass");
-        Assert.assertEquals(".classes.xir", task.getClassOutputExtension().get());
+        final G4toClassTask task = (G4toClassTask) project.getTasks().getByName("g4ToSchema");
+        Assert.assertEquals(".schema.xir", task.getSchemaOutputExtension().get());
         Assert.assertEquals(".model.xir", task.getModelOutputExtension().get());
         Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Parser", task.getParserClassName().get());
         Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Lexer", task.getLexerClassName().get());

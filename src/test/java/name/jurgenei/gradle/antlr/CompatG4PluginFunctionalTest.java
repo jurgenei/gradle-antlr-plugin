@@ -30,7 +30,7 @@ public class CompatG4PluginFunctionalTest {
         final BuildResult result = run(projectDir, "tasks", "--all");
 
         Assert.assertTrue("Expected antlrG4XmlAst task", result.getOutput().contains("antlrG4XmlAst"));
-        Assert.assertTrue("Expected antlrG4ToClass task", result.getOutput().contains("antlrG4ToClass"));
+        Assert.assertTrue("Expected antlrG4ToSchema task", result.getOutput().contains("antlrG4ToSchema"));
     }
 
     @Test
@@ -85,4 +85,3 @@ public class CompatG4PluginFunctionalTest {
                 StandardCharsets.UTF_8);
     }
 }
-

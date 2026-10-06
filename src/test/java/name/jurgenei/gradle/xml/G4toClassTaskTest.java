@@ -26,17 +26,17 @@ public class G4toClassTaskTest {
         Files.writeString(grammarFile.toPath(), sampleGrammar(), StandardCharsets.UTF_8);
 
         final File outputDir = temporaryFolder.newFolder("g4-out");
-        final File classesOut = new File(outputDir, "mini.classes.xir");
+        final File schemaOut = new File(outputDir, "mini.schema.xir");
         final File modelOut = new File(outputDir, "mini.model.xir");
 
         task.input(grammarFile);
-        task.output(classesOut);
+        task.output(schemaOut);
         task.modelOutput(modelOut);
         task.convertAll();
 
-        Assert.assertTrue(classesOut.isFile());
+        Assert.assertTrue(schemaOut.isFile());
         Assert.assertTrue(modelOut.isFile());
-        Assert.assertTrue(Files.readString(classesOut.toPath(), StandardCharsets.UTF_8).contains("(class Assignment)"));
+        Assert.assertTrue(Files.readString(schemaOut.toPath(), StandardCharsets.UTF_8).contains("(class Assignment)"));
         Assert.assertTrue(Files.readString(modelOut.toPath(), StandardCharsets.UTF_8).contains("(rule assignment"));
     }
 

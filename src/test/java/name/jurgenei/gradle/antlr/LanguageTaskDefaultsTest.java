@@ -25,7 +25,7 @@ public class LanguageTaskDefaultsTest {
         Assert.assertEquals("script", defaults.startRule());
         Assert.assertEquals(List.of("**/*.sql"), defaults.includes());
         Assert.assertEquals(".xml", defaults.targetExtension());
-        Assert.assertEquals("compact", defaults.xirFormat());
+        Assert.assertEquals("compact", defaults.outputFormat());
     }
 
     @Test
@@ -45,7 +45,7 @@ public class LanguageTaskDefaultsTest {
         Assert.assertEquals("root", defaults.startRule());
         Assert.assertEquals(List.of("**/*.fed"), defaults.includes());
         Assert.assertEquals(".xir", defaults.targetExtension());
-        Assert.assertEquals("beautified", defaults.xirFormat());
+        Assert.assertEquals("beautified", defaults.outputFormat());
     }
 
     @Test
@@ -56,7 +56,7 @@ public class LanguageTaskDefaultsTest {
         assertNullRejected("startRule cannot be null", "g", "p", "l", null, List.of("**/*.sql"), ".xml", "compact");
         assertNullRejected("includes cannot be null", "g", "p", "l", "r", null, ".xml", "compact");
         assertNullRejected("targetExtension cannot be null", "g", "p", "l", "r", List.of("**/*.sql"), null, "compact");
-        assertNullRejected("xirFormat cannot be null", "g", "p", "l", "r", List.of("**/*.sql"), ".xml", null);
+        assertNullRejected("outputFormat cannot be null", "g", "p", "l", "r", List.of("**/*.sql"), ".xml", null);
     }
 
     @Test
@@ -85,7 +85,7 @@ public class LanguageTaskDefaultsTest {
         Assert.assertEquals("script", task.getStartRule().get());
         Assert.assertEquals(List.of("**/*.sql"), task.getIncludes().get());
         Assert.assertEquals(".xir", task.getTargetExtension().get());
-        Assert.assertEquals("beautified", task.getXirFormat().get());
+        Assert.assertEquals("beautified", task.getOutputFormat().get());
     }
 
     private static void assertNullRejected(
@@ -96,10 +96,10 @@ public class LanguageTaskDefaultsTest {
             final String startRule,
             final List<String> includes,
             final String targetExtension,
-            final String xirFormat) {
+            final String outputFormat) {
         final NullPointerException ex = Assert.assertThrows(
                 NullPointerException.class,
-                () -> new LanguageTaskDefaults(grammar, parser, lexer, startRule, includes, targetExtension, xirFormat));
+                () -> new LanguageTaskDefaults(grammar, parser, lexer, startRule, includes, targetExtension, outputFormat));
         Assert.assertEquals(expectedMessage, ex.getMessage());
     }
 
@@ -110,4 +110,3 @@ public class LanguageTaskDefaultsTest {
         }
     }
 }
-

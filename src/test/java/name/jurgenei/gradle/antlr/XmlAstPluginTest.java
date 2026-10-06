@@ -41,7 +41,7 @@ public class XmlAstPluginTest {
         Assert.assertEquals("grammarSpec", g4Task.getStartRule().get());
         Assert.assertTrue(g4Task.getTaskDependencies().getDependencies(g4Task).contains(project.getTasks().named("classes").get()));
 
-        final G4toClassTask g4ToClassTask = (G4toClassTask) project.getTasks().getByName("antlrG4ToClass");
+        final G4toClassTask g4ToClassTask = (G4toClassTask) project.getTasks().getByName("antlrG4ToSchema");
         Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Parser", g4ToClassTask.getParserClassName().get());
         Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Lexer", g4ToClassTask.getLexerClassName().get());
         Assert.assertEquals("grammarSpec", g4ToClassTask.getStartRule().get());
@@ -64,7 +64,7 @@ public class XmlAstPluginTest {
 
         Assert.assertTrue(legacyTask.getRuntimeClasspath().getFiles().containsAll(mainSourceSet.getRuntimeClasspath().getFiles()));
         Assert.assertTrue(modernTask.getRuntimeClasspath().getFiles().containsAll(mainSourceSet.getRuntimeClasspath().getFiles()));
-        Assert.assertEquals("compact", legacyTask.getXirFormat().get());
+        Assert.assertEquals("compact", legacyTask.getOutputFormat().get());
 
         Assert.assertTrue(legacyTask.getTaskDependencies().getDependencies(legacyTask)
                 .contains(project.getTasks().named("classes").get()));

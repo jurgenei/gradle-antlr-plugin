@@ -179,7 +179,7 @@ public class XmlAstPluginFunctionalTest {
                     lexerClassName.set('e2e.MiniLexer')
                     startRule.set('script')
                     targetExtension.set('.xir')
-                    xirFormat.set('beautified')
+                    outputFormat.set('beautified')
                 }
                 """);
 
@@ -282,7 +282,7 @@ public class XmlAstPluginFunctionalTest {
     }
 
     @Test
-    public void rejectsInvalidXirFormatConfiguration() throws Exception {
+    public void rejectsInvalidOutputFormatConfiguration() throws Exception {
         final File projectDir = temporaryFolder.newFolder("functional-invalid-xir-format");
         writeSettings(projectDir);
         writeBuildFile(projectDir, """
@@ -312,7 +312,7 @@ public class XmlAstPluginFunctionalTest {
                     lexerClassName.set('e2e.MiniLexer')
                     startRule.set('script')
                     targetExtension.set('.xir')
-                    xirFormat.set('pretty')
+                    outputFormat.set('pretty')
                 }
                 """);
 
@@ -338,8 +338,8 @@ public class XmlAstPluginFunctionalTest {
 
         final BuildResult result = runAndFail(projectDir, "xmlast");
         Assert.assertTrue(
-                "Expected xir format validation failure",
-                result.getOutput().contains("xirFormat must be 'compact' or 'beautified'"));
+                "Expected output format validation failure",
+                result.getOutput().contains("outputFormat must be 'compact' or 'beautified'"));
     }
 
     @Test

@@ -147,7 +147,7 @@ public final class DynamicAntlrXmlAstConverter {
             final String startRule,
             final boolean compression,
             final boolean continueOnError,
-            final String xirFormat,
+            final String outputFormat,
             final Consumer<String> outcomeLogger) {
         validateCommonInputs(sourceRoot, sourceFiles, destinationRoot, targetExtension, classLoader, lexerClassName, parserClassName, startRule);
 
@@ -162,7 +162,7 @@ public final class DynamicAntlrXmlAstConverter {
                 startRule,
                 compression,
                 continueOnError,
-                xirFormat,
+                outputFormat,
                 GrammarConstants.EXECUTION_MODEL_SEQUENTIAL,
                 GrammarConstants.DEFAULT_PARALLELISM,
                 outcomeLogger
@@ -232,12 +232,12 @@ public final class DynamicAntlrXmlAstConverter {
             final String startRule,
             final boolean compression,
             final boolean continueOnError,
-            final String xirFormat,
+            final String outputFormat,
             final String executionModelName,
             final int configuredParallelism,
             final Consumer<String> outcomeLogger) {
         validateCommonInputs(sourceRoot, sourceFiles, destinationRoot, targetExtension, classLoader, lexerClassName, parserClassName, startRule);
-        final XirSerializer.OutputFormat resolvedXirOutputFormat = resolveXirOutputFormat(xirFormat);
+        final XirSerializer.OutputFormat resolvedXirOutputFormat = resolveOutputFormat(outputFormat);
 
         // Guard: Parallelism constraints
         if (configuredParallelism < 1) {
@@ -991,18 +991,18 @@ public final class DynamicAntlrXmlAstConverter {
         return targetExtension != null && XIR_EXTENSION.equalsIgnoreCase(targetExtension.trim());
     }
 
-    private XirSerializer.OutputFormat resolveXirOutputFormat(final String xirFormat) {
-        if (xirFormat == null || xirFormat.isBlank()) {
+    private XirSerializer.OutputFormat resolveOutputFormat(final String outputFormat) {
+        if (outputFormat == null || outputFormat.isBlank()) {
             return XirSerializer.OutputFormat.COMPACT;
         }
-        final String normalized = xirFormat.trim().toLowerCase(java.util.Locale.ROOT);
+        final String normalized = outputFormat.trim().toLowerCase(java.util.Locale.ROOT);
         if (XIR_FORMAT_BEAUTIFIED.equals(normalized)) {
             return XirSerializer.OutputFormat.BEAUTIFIED;
         }
         if (XIR_FORMAT_COMPACT.equals(normalized)) {
             return XirSerializer.OutputFormat.COMPACT;
         }
-        throw new IllegalArgumentException("Unsupported xirFormat: '" + xirFormat + "'. Expected 'compact' or 'beautified'.");
+        throw new IllegalArgumentException("Unsupported outputFormat: '" + outputFormat + "'. Expected 'compact' or 'beautified'.");
     }
 
     private String xmlToXir(final String xml, final XirSerializer.OutputFormat outputFormat) throws Exception {

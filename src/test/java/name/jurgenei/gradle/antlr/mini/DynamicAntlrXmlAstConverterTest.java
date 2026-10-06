@@ -255,7 +255,7 @@ public class DynamicAntlrXmlAstConverterTest {
     }
 
     @Test
-    public void rejectsUnsupportedXirFormat() throws Exception {
+    public void rejectsUnsupportedOutputFormat() throws Exception {
         final File outputDir = temporaryFolder.newFolder("xml-ast-invalid-xir-format");
         final List<File> inputs = List.of(VALID_DIR.resolve("01_select_star.sql").toFile());
 
@@ -275,11 +275,11 @@ public class DynamicAntlrXmlAstConverterTest {
                         "pretty",
                         null));
 
-        Assert.assertTrue(ex.getMessage().contains("Unsupported xirFormat"));
+        Assert.assertTrue(ex.getMessage().contains("Unsupported outputFormat"));
     }
 
     @Test
-    public void acceptsBlankXirFormatAsCompactDefault() throws Exception {
+    public void acceptsBlankOutputFormatAsCompactDefault() throws Exception {
         final File outputDir = temporaryFolder.newFolder("xml-ast-blank-xir-format");
         final List<File> inputs = List.of(VALID_DIR.resolve("01_select_star.sql").toFile());
 

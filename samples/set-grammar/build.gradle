@@ -39,6 +39,6 @@ tasks.register('xirast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
 
     includes.set(['**/*.sql'])
     targetExtension.set('.xir')
-    xirFormat.set('beautified')
+    outputFormat.set('beautified')
     continueOnError.set(true)
 }

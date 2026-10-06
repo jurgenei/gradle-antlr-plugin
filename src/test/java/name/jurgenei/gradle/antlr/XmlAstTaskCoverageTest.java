@@ -21,7 +21,7 @@ public class XmlAstTaskCoverageTest {
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
     @Test
-    public void convertsLegacyTaskWithConfiguredXirFormat() throws Exception {
+    public void convertsLegacyTaskWithConfiguredOutputFormat() throws Exception {
         final TestLegacyXmlAstTask task = newTask("legacy-xmlast-xir");
         final File sourceDir = temporaryFolder.newFolder("legacy-source");
         final File destinationDir = temporaryFolder.newFolder("legacy-out");
@@ -36,7 +36,7 @@ public class XmlAstTaskCoverageTest {
         task.getLexerClassName().set(MiniLexer.class.getName());
         task.getStartRule().set("script");
         task.getTargetExtension().set(".xir");
-        task.getXirFormat().set("beautified");
+        task.getOutputFormat().set("beautified");
         task.getRuntimeClasspath().from(runtimeLocation(MiniParser.class));
 
         task.convertSqlTrees();

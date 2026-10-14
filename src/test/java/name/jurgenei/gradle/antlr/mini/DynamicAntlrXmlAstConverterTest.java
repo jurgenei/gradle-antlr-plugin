@@ -11,6 +11,9 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
 import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -163,6 +166,72 @@ public class DynamicAntlrXmlAstConverterTest {
         Assert.assertTrue("Expected XML output for fallback-decoded source", Files.exists(xmlPath));
         final String xml = Files.readString(xmlPath, StandardCharsets.UTF_8);
         Assert.assertTrue("Expected decoded non-UTF8 character in XML output", xml.contains("caf\u00E9"));
+    }
+
+    @Test
+    public void prefersCp1252WhenIso88591ResultContainsC1Controls() throws Exception {
+        final File sourceDir = temporaryFolder.newFolder("cp1252-charset-source");
+        final Path sourceFile = sourceDir.toPath().resolve("cp1252_input.sql");
+        final String sql = "SELECT id, '\u20AC' AS currency_symbol FROM books;";
+        Files.writeString(sourceFile, sql, java.nio.charset.Charset.forName("windows-1252"));
+
+        final File outputDir = temporaryFolder.newFolder("cp1252-charset-out");
+        new DynamicAntlrXmlAstConverter().convertFileTree(
+                sourceDir,
+                List.of(sourceFile.toFile()),
+                outputDir,
+                ".xml",
+                MiniLexer.class.getClassLoader(),
+                MiniLexer.class.getName(),
+                MiniParser.class.getName(),
+                "script",
+                false,
+                false,
+                null);
+
+        final Path xmlPath = outputDir.toPath().resolve("cp1252_input.xml");
+        Assert.assertTrue("Expected XML output for cp1252 fallback-decoded source", Files.exists(xmlPath));
+        final String xml = Files.readString(xmlPath, StandardCharsets.UTF_8);
+        Assert.assertTrue("Expected CP1252 euro symbol in XML output", xml.contains("\u20AC"));
+    }
+
+    @Test
+    public void coversFallbackHelperBranches() throws Exception {
+        final DynamicAntlrXmlAstConverter converter = new DynamicAntlrXmlAstConverter();
+
+        final Method isDecodingFailure = DynamicAntlrXmlAstConverter.class
+                .getDeclaredMethod("isDecodingFailure", IOException.class);
+        isDecodingFailure.setAccessible(true);
+        Assert.assertEquals(Boolean.TRUE, isDecodingFailure.invoke(converter, new java.nio.charset.MalformedInputException(1)));
+        Assert.assertEquals(Boolean.TRUE, isDecodingFailure.invoke(
+                converter,
+                new IOException("wrapped", new java.nio.charset.UnmappableCharacterException(1))));
+        Assert.assertEquals(Boolean.TRUE, isDecodingFailure.invoke(
+                converter,
+                new IOException("nested", new RuntimeException(new java.nio.charset.UnmappableCharacterException(1)))));
+        Assert.assertEquals(Boolean.FALSE, isDecodingFailure.invoke(converter, new IOException("plain-io")));
+
+        final Method decodeSourceWithFallback = DynamicAntlrXmlAstConverter.class
+                .getDeclaredMethod("decodeSourceWithFallback", Path.class, java.util.function.Consumer.class);
+        decodeSourceWithFallback.setAccessible(true);
+        final Path directoryPath = temporaryFolder.newFolder("not-a-file").toPath();
+        try {
+            decodeSourceWithFallback.invoke(converter, directoryPath, null);
+            Assert.fail("Expected decodeSourceWithFallback to throw for directory input");
+        } catch (InvocationTargetException ex) {
+            Assert.assertTrue("Expected IOException/IsDirectoryException cause", ex.getCause() instanceof IOException);
+        }
+
+        final Method isXirTarget = DynamicAntlrXmlAstConverter.class
+                .getDeclaredMethod("isXirTarget", String.class);
+        isXirTarget.setAccessible(true);
+        Assert.assertEquals(Boolean.FALSE, isXirTarget.invoke(converter, new Object[]{null}));
+
+        final Method resolveOutputFormat = DynamicAntlrXmlAstConverter.class
+                .getDeclaredMethod("resolveOutputFormat", String.class);
+        resolveOutputFormat.setAccessible(true);
+        final Object format = resolveOutputFormat.invoke(converter, new Object[]{null});
+        Assert.assertEquals("COMPACT", format.toString());
     }
 
     @Test

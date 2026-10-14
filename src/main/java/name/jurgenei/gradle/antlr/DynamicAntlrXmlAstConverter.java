@@ -1012,27 +1012,18 @@ public final class DynamicAntlrXmlAstConverter {
             }
         }
 
-        IOException lastFailure = null;
-        final Charset[] fallbacks = {FALLBACK_ISO_8859_1, FALLBACK_CP1252};
-        for (Charset fallback : fallbacks) {
-            try {
-                final String content = Files.readString(sourceFile, fallback);
-                if (outcomeLogger != null) {
-                    outcomeLogger.accept("[INFO] Decoded " + sourceFile + " with fallback charset " + fallback.name());
-                }
-                return content;
-            } catch (IOException fallbackEx) {
-                if (!isDecodingFailure(fallbackEx)) {
-                    throw fallbackEx;
-                }
-                lastFailure = fallbackEx;
+        final String iso88591Content = Files.readString(sourceFile, FALLBACK_ISO_8859_1);
+        if (containsC1ControlCharacters(iso88591Content)) {
+            final String cp1252Content = Files.readString(sourceFile, FALLBACK_CP1252);
+            if (outcomeLogger != null) {
+                outcomeLogger.accept("[INFO] Decoded " + sourceFile + " with fallback charset " + FALLBACK_CP1252.name());
             }
+            return cp1252Content;
         }
-
-        if (lastFailure != null) {
-            throw lastFailure;
+        if (outcomeLogger != null) {
+            outcomeLogger.accept("[INFO] Decoded " + sourceFile + " with fallback charset " + FALLBACK_ISO_8859_1.name());
         }
-        throw new IOException("Unable to decode source file " + sourceFile);
+        return iso88591Content;
     }
 
     private boolean isDecodingFailure(final IOException exception) {
@@ -1045,6 +1036,16 @@ public final class DynamicAntlrXmlAstConverter {
                 return true;
             }
             cause = cause.getCause();
+        }
+        return false;
+    }
+
+    private boolean containsC1ControlCharacters(final String value) {
+        for (int i = 0; i < value.length(); i++) {
+            final char ch = value.charAt(i);
+            if (ch >= 0x80 && ch <= 0x9F) {
+                return true;
+            }
         }
         return false;
     }
@@ -1570,10 +1571,7 @@ public final class DynamicAntlrXmlAstConverter {
 
     private long countLines(final Path sourceFile) throws IOException {
         final String content = decodeSourceWithFallback(sourceFile, null);
-        if (content.isEmpty()) {
-            return 0L;
-        }
-        return 1L + content.chars().filter(ch -> ch == '\n').count();
+        return content.lines().count();
     }
 
     private String toPortablePath(final Path relativePath) {

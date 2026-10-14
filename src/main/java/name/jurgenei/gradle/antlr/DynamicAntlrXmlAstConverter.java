@@ -32,7 +32,10 @@ import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.Charset;
+import java.nio.charset.MalformedInputException;
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.UnmappableCharacterException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -80,6 +83,8 @@ public final class DynamicAntlrXmlAstConverter {
     private static final String SAX_LEXICAL_HANDLER_PROPERTY = "http://xml.org/sax/properties/lexical-handler";
     private static final String XIR_FORMAT_COMPACT = "compact";
     private static final String XIR_FORMAT_BEAUTIFIED = "beautified";
+    private static final Charset FALLBACK_ISO_8859_1 = StandardCharsets.ISO_8859_1;
+    private static final Charset FALLBACK_CP1252 = Charset.forName("windows-1252");
 
     private final AtomicInteger completedFilesCounter = new AtomicInteger();
     private final Map<Integer, DecisionProfileAggregate> decisionProfileAggregates = new ConcurrentHashMap<>();
@@ -495,7 +500,14 @@ public final class DynamicAntlrXmlAstConverter {
         final long fileStartNanos = System.nanoTime();
         currentBinding.set(binding);
         try {
-            final String content = parseToTarget(job.sourceFile().toPath(), binding, startRule, targetExtension, xirOutputFormat, compression);
+            final String content = parseToTarget(
+                    job.sourceFile().toPath(),
+                    binding,
+                    startRule,
+                    targetExtension,
+                    xirOutputFormat,
+                    compression,
+                    outcomeLogger);
             Files.writeString(job.output(), content, StandardCharsets.UTF_8);
             final long durationNanos = System.nanoTime() - fileStartNanos;
             final long lineCount = isLineCountMetricsEnabled() ? countLines(job.sourceFile().toPath()) : 0L;
@@ -939,9 +951,11 @@ public final class DynamicAntlrXmlAstConverter {
             final String startRule,
             final String targetExtension,
             final XirSerializer.OutputFormat xirOutputFormat,
-            final boolean compression) throws Exception {
+            final boolean compression,
+            final Consumer<String> outcomeLogger) throws Exception {
         final Constructor<? extends Lexer> lexerCtor = binding.lexerCtor();
-        final Lexer lexer = lexerCtor.newInstance(CharStreams.fromPath(sourceFile, StandardCharsets.UTF_8));
+        final String sourceContent = decodeSourceWithFallback(sourceFile, outcomeLogger);
+        final Lexer lexer = lexerCtor.newInstance(CharStreams.fromString(sourceContent));
 
         final CommonTokenStream tokenStream = new CommonTokenStream(lexer);
 
@@ -985,6 +999,54 @@ public final class DynamicAntlrXmlAstConverter {
             return xmlToXir(xml, xirOutputFormat);
         }
         return xml;
+    }
+
+    private String decodeSourceWithFallback(
+            final Path sourceFile,
+            final Consumer<String> outcomeLogger) throws IOException {
+        try {
+            return Files.readString(sourceFile, StandardCharsets.UTF_8);
+        } catch (IOException utf8Ex) {
+            if (!isDecodingFailure(utf8Ex)) {
+                throw utf8Ex;
+            }
+        }
+
+        IOException lastFailure = null;
+        final Charset[] fallbacks = {FALLBACK_ISO_8859_1, FALLBACK_CP1252};
+        for (Charset fallback : fallbacks) {
+            try {
+                final String content = Files.readString(sourceFile, fallback);
+                if (outcomeLogger != null) {
+                    outcomeLogger.accept("[INFO] Decoded " + sourceFile + " with fallback charset " + fallback.name());
+                }
+                return content;
+            } catch (IOException fallbackEx) {
+                if (!isDecodingFailure(fallbackEx)) {
+                    throw fallbackEx;
+                }
+                lastFailure = fallbackEx;
+            }
+        }
+
+        if (lastFailure != null) {
+            throw lastFailure;
+        }
+        throw new IOException("Unable to decode source file " + sourceFile);
+    }
+
+    private boolean isDecodingFailure(final IOException exception) {
+        if (exception instanceof MalformedInputException || exception instanceof UnmappableCharacterException) {
+            return true;
+        }
+        Throwable cause = exception.getCause();
+        while (cause != null) {
+            if (cause instanceof MalformedInputException || cause instanceof UnmappableCharacterException) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 
     private boolean isXirTarget(final String targetExtension) {
@@ -1507,9 +1569,11 @@ public final class DynamicAntlrXmlAstConverter {
     }
 
     private long countLines(final Path sourceFile) throws IOException {
-        try (Stream<String> lines = Files.lines(sourceFile, StandardCharsets.UTF_8)) {
-            return lines.count();
+        final String content = decodeSourceWithFallback(sourceFile, null);
+        if (content.isEmpty()) {
+            return 0L;
         }
+        return 1L + content.chars().filter(ch -> ch == '\n').count();
     }
 
     private String toPortablePath(final Path relativePath) {

@@ -139,6 +139,33 @@ public class DynamicAntlrXmlAstConverterTest {
     }
 
     @Test
+    public void decodesIso88591SourceWithFallbackWhenUtf8DecodingFails() throws Exception {
+        final File sourceDir = temporaryFolder.newFolder("legacy-charset-source");
+        final Path sourceFile = sourceDir.toPath().resolve("legacy_input.sql");
+        final String sql = "SELECT id, 'caf\u00E9' AS title FROM books;";
+        Files.writeString(sourceFile, sql, StandardCharsets.ISO_8859_1);
+
+        final File outputDir = temporaryFolder.newFolder("legacy-charset-out");
+        new DynamicAntlrXmlAstConverter().convertFileTree(
+                sourceDir,
+                List.of(sourceFile.toFile()),
+                outputDir,
+                ".xml",
+                MiniLexer.class.getClassLoader(),
+                MiniLexer.class.getName(),
+                MiniParser.class.getName(),
+                "script",
+                false,
+                false,
+                null);
+
+        final Path xmlPath = outputDir.toPath().resolve("legacy_input.xml");
+        Assert.assertTrue("Expected XML output for fallback-decoded source", Files.exists(xmlPath));
+        final String xml = Files.readString(xmlPath, StandardCharsets.UTF_8);
+        Assert.assertTrue("Expected decoded non-UTF8 character in XML output", xml.contains("caf\u00E9"));
+    }
+
+    @Test
     public void compressionPathIndexProvidesStableLookupForFlowgraphStyleMatching() throws Exception {
         final File outputDir = temporaryFolder.newFolder("xml-ast-compressed-lookup");
         final List<File> inputs = List.of(VALID_DIR.resolve("04_mixed_script.sql").toFile());

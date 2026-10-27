@@ -4,9 +4,29 @@
 
 [![Plugin Portal](https://img.shields.io/gradle-plugin-portal/v/name.jurgenei.gradle.antlr?label=Plugin%20Portal)](https://plugins.gradle.org/plugin/name.jurgenei.gradle.antlr)
 [![Build and Test](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/ci.yml)
+[![JUnit Report](https://img.shields.io/badge/JUnit-Report-blue?logo=githubactions)](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/ci.yml)
 [![Coverage CI](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/coverage.yml/badge.svg)](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/coverage.yml)
-[![Coverage](https://codecov.io/gh/jurgenei/gradle-antlr-plugin/graph/badge.svg)](https://codecov.io/gh/jurgenei/gradle-antlr-plugin)
+[![CodeQL](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/codeql.yml/badge.svg)](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/codeql.yml)
+[![Dependency Check](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/dependency-check.yml/badge.svg)](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/dependency-check.yml)
+[![SpotBugs Security](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/spotbugs-security.yml/badge.svg)](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/spotbugs-security.yml)
+[![Checkstyle](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/checkstyle.yml/badge.svg)](https://github.com/jurgenei/gradle-antlr-plugin/actions/workflows/checkstyle.yml)
+[![Dependabot](https://img.shields.io/badge/dependabot-enabled-025E8C?logo=dependabot)](https://github.com/jurgenei/gradle-antlr-plugin/security/dependabot)
+[![Coverage](https://codecov.io/gh/jurgenei/gradle-antlr-plugin/graph/badge.svg?branch=main)](https://codecov.io/gh/jurgenei/gradle-antlr-plugin)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Java](https://img.shields.io/badge/java-21+-green.svg)](https://www.oracle.com/java/)
+[![Gradle](https://img.shields.io/badge/gradle-9.5+-blue.svg)](https://gradle.org/)
+
+## Position in XIR spine
+
+- **Problem solved**: deterministic extraction of parser output into XML/XIR AST artifacts from source corpora.
+- **Relation to XIR**: observation layer feeding derivation pipelines.
+- **Why it matters**: turns language syntax into structured evidence for lineage and governance applications.
+
+```text
+Structured Knowledge -> XIR -> Observation -> Derivation -> Knowledge -> Applications
+```
+
+Next repository in reading path: [xir-g4](https://github.com/jurgenei/xir-g4).
 
 ## What plugin adds
 

@@ -1,0 +1,46 @@
+name: Dependency Check
+
+on:
+  push:
+    branches: ["main", "release/**"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  dependency-check:
+    runs-on: ubuntu-latest
+    env:
+      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run dependency check if configured
+        shell: bash
+        run: |
+          if ./gradlew -q tasks --all | grep -q "dependencyCheckAnalyze"; then
+            if [ -n "${NVD_API_KEY}" ]; then
+              ./gradlew --no-daemon dependencyCheckAnalyze -Porg.owasp.dependencycheck.nvd.api.key="${NVD_API_KEY}"
+            else
+              ./gradlew --no-daemon dependencyCheckAnalyze
+            fi
+          elif ./gradlew -q tasks --all | grep -q "dependencyCheck$"; then
+            if [ -n "${NVD_API_KEY}" ]; then
+              ./gradlew --no-daemon dependencyCheck -Porg.owasp.dependencycheck.nvd.api.key="${NVD_API_KEY}"
+            else
+              ./gradlew --no-daemon dependencyCheck
+            fi
+          else
+            echo "No dependency-check task configured; skipping."
+          fi
+

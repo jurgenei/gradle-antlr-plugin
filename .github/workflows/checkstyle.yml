@@ -1,0 +1,36 @@
+name: Checkstyle
+
+on:
+  push:
+    branches: ["main", "release/**"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  checkstyle:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run Checkstyle if configured
+        shell: bash
+        run: |
+          if ./gradlew -q tasks --all | grep -q "checkstyleMain"; then
+            ./gradlew --no-daemon checkstyleMain
+          elif ./gradlew -q tasks --all | grep -q "checkstyle$"; then
+            ./gradlew --no-daemon checkstyle
+          else
+            echo "No Checkstyle task configured; skipping."
+          fi
+

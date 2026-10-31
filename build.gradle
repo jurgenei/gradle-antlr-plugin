@@ -1,7 +1,8 @@
+import org.gradle.api.GradleException
+import java.security.MessageDigest
 plugins {
     id 'antlr'
     id 'java-gradle-plugin'
-    id 'com.gradle.plugin-publish' version '2.1.1'
     id 'jacoco'
     id 'maven-publish'
     id 'signing'
@@ -58,6 +59,20 @@ gradlePlugin {
 }
 
 publishing {
+    repositories {
+        mavenLocal()
+        maven {
+            name = 'sonatype'
+            def releasesRepoUrl = 'https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/'
+            def snapshotsRepoUrl = 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
+            url = uri(version.toString().endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl)
+            credentials {
+                username = providers.gradleProperty('mavenCentralUsername').orNull
+                password = providers.gradleProperty('mavenCentralPassword').orNull
+            }
+        }
+    }
+
     publications {
         mavenJava(MavenPublication) {
             from components.java
@@ -210,4 +225,63 @@ tasks.register('allSecurityChecks') {
     dependsOn tasks.named('check')
     dependsOn tasks.named('dependencyCheck')
     dependsOn tasks.named('spotbugsMain')
+}
+
+
+def centralArtifactId = (project.findProperty('mavenArtifactId') ?: project.name).toString()
+def centralGroupPath = project.group.toString().replace('.', '/')
+
+def stageCentralBundleRepo = tasks.register('stageCentralBundleRepo', Sync) {
+    dependsOn tasks.named('publishToMavenLocal')
+
+    def artifactBaseDir = file("${System.getProperty('user.home')}/.m2/repository/${centralGroupPath}/${centralArtifactId}")
+    def artifactVersionDir = file("${artifactBaseDir}/${project.version}")
+    from(artifactVersionDir)
+    into(layout.buildDirectory.dir("central-staging-repo/${centralGroupPath}/${centralArtifactId}/${project.version}"))
+
+    doFirst {
+        if (!artifactVersionDir.exists()) {
+            throw new GradleException("Expected local Maven artifact version directory not found: ${artifactVersionDir}")
+        }
+    }
+}
+
+def generateCentralBundleChecksums = tasks.register('generateCentralBundleChecksums') {
+    dependsOn stageCentralBundleRepo
+    notCompatibleWithConfigurationCache('Generates checksum files by scanning staged output directory at execution time.')
+
+    doLast {
+        def stagedVersionDir = layout.buildDirectory.dir("central-staging-repo/${centralGroupPath}/${centralArtifactId}/${project.version}").get().asFile
+        if (!stagedVersionDir.exists()) {
+            throw new GradleException("Expected staged version directory not found: ${stagedVersionDir}")
+        }
+
+        def checksum = { File input, String algorithm ->
+            MessageDigest digest = MessageDigest.getInstance(algorithm)
+            input.withInputStream { stream ->
+                byte[] buffer = new byte[8192]
+                int read
+                while ((read = stream.read(buffer)) >= 0) {
+                    digest.update(buffer, 0, read)
+                }
+            }
+            digest.digest().collect { String.format('%02x', it & 0xff) }.join('')
+        }
+
+        stagedVersionDir.eachFileRecurse { file ->
+            if (file.isFile() && !file.name.endsWith('.md5') && !file.name.endsWith('.sha1')) {
+                file.parentFile.toPath().resolve(file.name + '.md5').toFile().text = checksum(file, 'MD5') + System.lineSeparator()
+                file.parentFile.toPath().resolve(file.name + '.sha1').toFile().text = checksum(file, 'SHA-1') + System.lineSeparator()
+            }
+        }
+    }
+}
+
+tasks.register('packageCentralBundle', Zip) {
+    dependsOn generateCentralBundleChecksums
+    archiveBaseName = project.name
+    archiveVersion = project.version.toString()
+    archiveClassifier = 'central-bundle'
+    destinationDirectory = layout.buildDirectory.dir('central-bundle').get().asFile
+    from layout.buildDirectory.dir('central-staging-repo')
 }

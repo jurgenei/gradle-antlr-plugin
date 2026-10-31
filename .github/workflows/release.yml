@@ -1,0 +1,113 @@
+name: Release to Maven Central
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'release/**'
+    tags:
+      - 'v*'
+
+jobs:
+  verify-release-branch:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Make wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Verify release branch build
+        run: ./gradlew clean test --stacktrace --no-daemon
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Make wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build signed artifacts and bundle
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingKey: ${{ secrets.SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.SIGNING_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingKeyId: ${{ secrets.SIGNING_KEY_ID }}
+        run: |
+          set -euo pipefail
+          for v in ORG_GRADLE_PROJECT_mavenCentralUsername ORG_GRADLE_PROJECT_mavenCentralPassword ORG_GRADLE_PROJECT_signingKey ORG_GRADLE_PROJECT_signingPassword; do
+            if [ -z "${!v:-}" ]; then
+              echo "Required secret missing: $v"
+              exit 1
+            fi
+          done
+          ./gradlew clean packageCentralBundle --stacktrace --no-daemon --info | tee publish.log
+
+      - name: Upload bundle to Central Publisher API
+        env:
+          CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+        run: |
+          set -euo pipefail
+          BUNDLE_PATH="$(find build/central-bundle -maxdepth 1 -type f -name '*.zip' | head -n 1)"
+          if [ -z "$BUNDLE_PATH" ] || [ ! -f "$BUNDLE_PATH" ]; then
+            echo "Bundle not found: $BUNDLE_PATH"
+            ls -la build || true
+            ls -la build/central-bundle || true
+            exit 1
+          fi
+          TMP_DIR="$(mktemp -d)"
+          unzip -q "$BUNDLE_PATH" -d "$TMP_DIR"
+          find "$TMP_DIR" -type f ! -name '*.md5' ! -name '*.sha1' -print0 | while IFS= read -r -d '' f; do
+            md5sum "$f" | awk '{print $1}' > "$f.md5"
+            sha1sum "$f" | awk '{print $1}' > "$f.sha1"
+          done
+          rm -f "$BUNDLE_PATH"
+          (
+            cd "$TMP_DIR"
+            zip -qr "$OLDPWD/$BUNDLE_PATH" .
+          )
+          rm -rf "$TMP_DIR"
+          curl --fail-with-body -sS -u "$CENTRAL_USERNAME:$CENTRAL_PASSWORD"             -X POST "https://central.sonatype.com/api/v1/publisher/upload?nameSpace=name.jurgenei.gradle&publishingType=AUTOMATIC"             -F "bundle=@$BUNDLE_PATH" | tee central-upload-response.json
+
+      - name: Upload publish log
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: publish-log-${{ github.run_id }}
+          path: publish.log
+          if-no-files-found: warn
+
+      - name: Upload Central response
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: central-response-${{ github.run_id }}
+          path: central-upload-response.json
+          if-no-files-found: warn

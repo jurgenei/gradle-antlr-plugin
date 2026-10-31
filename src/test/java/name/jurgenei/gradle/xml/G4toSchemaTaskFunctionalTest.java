@@ -1,4 +1,4 @@
-package name.jurgenei.gradle.xml;
+package org.flowdigger.gradle.xml;
 
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.BuildTask;
@@ -26,10 +26,10 @@ public class G4toSchemaTaskFunctionalTest {
         writeBuildFile(projectDir, """
                 plugins {
                     id 'java'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
 
-                tasks.named('antlrG4ToSchema', name.jurgenei.gradle.xml.G4toSchemaTask) {
+                tasks.named('antlrG4ToSchema', org.flowdigger.gradle.xml.G4toSchemaTask) {
                     fileset('src/main/antlr') {
                         include '**/*.g4'
                     }
@@ -66,10 +66,10 @@ public class G4toSchemaTaskFunctionalTest {
         writeBuildFile(projectDir, """
                 plugins {
                     id 'java'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
 
-                tasks.named('antlrG4ToSchema', name.jurgenei.gradle.xml.G4toSchemaTask) {
+                tasks.named('antlrG4ToSchema', org.flowdigger.gradle.xml.G4toSchemaTask) {
                     input('src/main/antlr/mini.g4')
                     output('build/class-model/mini.schema.xir')
                 }

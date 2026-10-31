@@ -1,6 +1,6 @@
-package name.jurgenei.gradle.antlr;
+package org.flowdigger.gradle.antlr;
 
-import name.jurgenei.gradle.xml.G4toSchemaTask;
+import org.flowdigger.gradle.xml.G4toSchemaTask;
 import org.gradle.api.Project;
 import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.Assert;
@@ -29,8 +29,8 @@ public class CompatG4PluginTest {
 
         final XmlAstG4GradleTask task = (XmlAstG4GradleTask) project.getTasks().getByName("g4XmlAst");
         Assert.assertEquals("antlr4", task.getGrammar().get());
-        Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Parser", task.getParserClassName().get());
-        Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Lexer", task.getLexerClassName().get());
+        Assert.assertEquals("org.flowdigger.parsers.ANTLRv4Parser", task.getParserClassName().get());
+        Assert.assertEquals("org.flowdigger.parsers.ANTLRv4Lexer", task.getLexerClassName().get());
         Assert.assertEquals("grammarSpec", task.getStartRule().get());
         Assert.assertTrue(task.getIncludes().get().contains("**/*.g4"));
         Assert.assertEquals(".xml", task.getTargetExtension().get());
@@ -46,8 +46,8 @@ public class CompatG4PluginTest {
         final G4toSchemaTask task = (G4toSchemaTask) project.getTasks().getByName("g4ToSchema");
         Assert.assertEquals(".schema.xir", task.getSchemaOutputExtension().get());
         Assert.assertEquals(".model.xir", task.getModelOutputExtension().get());
-        Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Parser", task.getParserClassName().get());
-        Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Lexer", task.getLexerClassName().get());
+        Assert.assertEquals("org.flowdigger.parsers.ANTLRv4Parser", task.getParserClassName().get());
+        Assert.assertEquals("org.flowdigger.parsers.ANTLRv4Lexer", task.getLexerClassName().get());
         Assert.assertEquals("grammarSpec", task.getStartRule().get());
     }
 }

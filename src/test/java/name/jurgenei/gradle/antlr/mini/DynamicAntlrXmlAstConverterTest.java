@@ -1,6 +1,6 @@
-package name.jurgenei.gradle.antlr.mini;
+package org.flowdigger.gradle.antlr.mini;
 
-import name.jurgenei.gradle.antlr.DynamicAntlrXmlAstConverter;
+import org.flowdigger.gradle.antlr.DynamicAntlrXmlAstConverter;
 import org.gradle.api.GradleException;
 import org.junit.Assert;
 import org.junit.Rule;

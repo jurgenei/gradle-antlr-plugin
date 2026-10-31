@@ -94,7 +94,7 @@ jobs:
             zip -qr "$OLDPWD/$BUNDLE_PATH" .
           )
           rm -rf "$TMP_DIR"
-          curl --fail-with-body -sS -u "$CENTRAL_USERNAME:$CENTRAL_PASSWORD"             -X POST "https://central.sonatype.com/api/v1/publisher/upload?nameSpace=name.jurgenei.gradle&publishingType=AUTOMATIC"             -F "bundle=@$BUNDLE_PATH" | tee central-upload-response.json
+          curl --fail-with-body -sS -u "$CENTRAL_USERNAME:$CENTRAL_PASSWORD"             -X POST "https://central.sonatype.com/api/v1/publisher/upload?nameSpace=org.flowdigger.gradle&publishingType=AUTOMATIC"             -F "bundle=@$BUNDLE_PATH" | tee central-upload-response.json
 
       - name: Upload publish log
         if: ${{ always() }}

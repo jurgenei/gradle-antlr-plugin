@@ -1,4 +1,4 @@
-package name.jurgenei.gradle.antlr.constants;
+package org.flowdigger.gradle.antlr.constants;
 
 /**
  * Time unit conversion constants to avoid magic numbers.

@@ -1,7 +1,7 @@
 lexer grammar MiniLexer;
 
 @header {
-package name.jurgenei.gradle.antlr.mini;
+package org.flowdigger.gradle.antlr.mini;
 }
 
 SELECT: 'SELECT';

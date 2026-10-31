@@ -1,4 +1,4 @@
-package name.jurgenei.gradle.antlr.catalog;
+package org.flowdigger.gradle.antlr.catalog;
 
 import org.junit.Assert;
 import org.junit.Rule;

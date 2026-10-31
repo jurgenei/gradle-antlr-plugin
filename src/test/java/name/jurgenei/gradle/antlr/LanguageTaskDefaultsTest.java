@@ -1,4 +1,4 @@
-package name.jurgenei.gradle.antlr;
+package org.flowdigger.gradle.antlr;
 
 import org.gradle.testfixtures.ProjectBuilder;
 import org.junit.Assert;

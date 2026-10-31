@@ -1,4 +1,4 @@
-package name.jurgenei.gradle.xml;
+package org.flowdigger.gradle.xml;
 
 import org.gradle.api.Project;
 import org.gradle.testfixtures.ProjectBuilder;

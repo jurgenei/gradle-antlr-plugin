@@ -1,7 +1,7 @@
-package name.jurgenei.gradle.antlr;
+package org.flowdigger.gradle.antlr;
 
-import name.jurgenei.gradle.antlr.catalog.GrammarCatalogEntry;
-import name.jurgenei.gradle.antlr.catalog.GrammarCatalogLoader;
+import org.flowdigger.gradle.antlr.catalog.GrammarCatalogEntry;
+import org.flowdigger.gradle.antlr.catalog.GrammarCatalogLoader;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.ConfigurableFileCollection;

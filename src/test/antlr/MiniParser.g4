@@ -1,7 +1,7 @@
 parser grammar MiniParser;
 
 @header {
-package name.jurgenei.gradle.antlr.mini;
+package org.flowdigger.gradle.antlr.mini;
 }
 
 options { tokenVocab=MiniLexer; }

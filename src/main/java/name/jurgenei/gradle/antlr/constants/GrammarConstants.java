@@ -1,4 +1,4 @@
-package name.jurgenei.gradle.antlr.constants;
+package org.flowdigger.gradle.antlr.constants;
 
 import java.util.List;
 import java.util.regex.Pattern;

@@ -19,4 +19,3 @@ Scope: `gradle-antlr-plugin` release notes sync for `0.1.1`
 - Added baseline `qodana.yaml` for JVM community linting on JDK 21.
 - Added `.github/workflows/qodana_code_quality.yml` aligned with CI branch policy (`main`/`master`).
 - Qodana workflow uses read-only permissions and publishes scan results without auto-fixes.
-

@@ -1,4 +1,4 @@
-package name.jurgenei.gradle.antlr.catalog;
+package org.flowdigger.gradle.antlr.catalog;
 
 import java.net.URI;
 import java.net.URISyntaxException;

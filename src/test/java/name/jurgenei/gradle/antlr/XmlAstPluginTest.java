@@ -1,6 +1,6 @@
-package name.jurgenei.gradle.antlr;
+package org.flowdigger.gradle.antlr;
 
-import name.jurgenei.gradle.xml.G4toSchemaTask;
+import org.flowdigger.gradle.xml.G4toSchemaTask;
 import org.gradle.api.Project;
 import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.tasks.SourceSet;
@@ -36,14 +36,14 @@ public class XmlAstPluginTest {
 
         final XmlAstG4GradleTask g4Task = (XmlAstG4GradleTask) project.getTasks().getByName("antlrG4XmlAst");
         Assert.assertEquals("antlr4", g4Task.getGrammar().get());
-        Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Parser", g4Task.getParserClassName().get());
-        Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Lexer", g4Task.getLexerClassName().get());
+        Assert.assertEquals("org.flowdigger.parsers.ANTLRv4Parser", g4Task.getParserClassName().get());
+        Assert.assertEquals("org.flowdigger.parsers.ANTLRv4Lexer", g4Task.getLexerClassName().get());
         Assert.assertEquals("grammarSpec", g4Task.getStartRule().get());
         Assert.assertTrue(g4Task.getTaskDependencies().getDependencies(g4Task).contains(project.getTasks().named("classes").get()));
 
         final G4toSchemaTask g4ToSchemaTask = (G4toSchemaTask) project.getTasks().getByName("antlrG4ToSchema");
-        Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Parser", g4ToSchemaTask.getParserClassName().get());
-        Assert.assertEquals("name.jurgenei.parsers.ANTLRv4Lexer", g4ToSchemaTask.getLexerClassName().get());
+        Assert.assertEquals("org.flowdigger.parsers.ANTLRv4Parser", g4ToSchemaTask.getParserClassName().get());
+        Assert.assertEquals("org.flowdigger.parsers.ANTLRv4Lexer", g4ToSchemaTask.getLexerClassName().get());
         Assert.assertEquals("grammarSpec", g4ToSchemaTask.getStartRule().get());
     }
 

@@ -1,4 +1,4 @@
-package name.jurgenei.gradle.antlr;
+package org.flowdigger.gradle.antlr;
 
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
@@ -23,7 +23,7 @@ public class CompatG4PluginFunctionalTest {
         writeBuildFile(projectDir, """
                 plugins {
                     id 'java'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
                 """);
 
@@ -40,7 +40,7 @@ public class CompatG4PluginFunctionalTest {
         writeBuildFile(projectDir, """
                 plugins {
                     id 'java'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
 
                 tasks.register('printG4Defaults') {
@@ -58,8 +58,8 @@ public class CompatG4PluginFunctionalTest {
         final String output = result.getOutput();
 
         Assert.assertTrue(output.contains("grammar=antlr4"));
-        Assert.assertTrue(output.contains("parserClassName=name.jurgenei.parsers.ANTLRv4Parser"));
-        Assert.assertTrue(output.contains("lexerClassName=name.jurgenei.parsers.ANTLRv4Lexer"));
+        Assert.assertTrue(output.contains("parserClassName=org.flowdigger.parsers.ANTLRv4Parser"));
+        Assert.assertTrue(output.contains("lexerClassName=org.flowdigger.parsers.ANTLRv4Lexer"));
         Assert.assertTrue(output.contains("startRule=grammarSpec"));
     }
 

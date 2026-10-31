@@ -1,9 +1,9 @@
-package name.jurgenei.gradle.xml;
+package org.flowdigger.gradle.xml;
 
-import name.jurgenei.ast.core.AstClassesPipeline;
-import name.jurgenei.ast.core.AstXirWriter;
-import name.jurgenei.ast.core.model.AstModel;
-import name.jurgenei.ast.core.model.GrammarModel;
+import org.flowdigger.ast.core.AstClassesPipeline;
+import org.flowdigger.ast.core.AstXirWriter;
+import org.flowdigger.ast.core.model.AstModel;
+import org.flowdigger.ast.core.model.GrammarModel;
 import org.gradle.api.Action;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.ConfigurableFileTree;
@@ -74,8 +74,8 @@ public abstract class G4toSchemaTask extends SourceTask {
     public G4toSchemaTask() {
         getSchemaOutputExtension().convention(".schema.xir");
         getModelOutputExtension().convention(".model.xir");
-        getLexerClassName().convention("name.jurgenei.parsers.ANTLRv4Lexer");
-        getParserClassName().convention("name.jurgenei.parsers.ANTLRv4Parser");
+        getLexerClassName().convention("org.flowdigger.parsers.ANTLRv4Lexer");
+        getParserClassName().convention("org.flowdigger.parsers.ANTLRv4Parser");
         getStartRule().convention("grammarSpec");
         getFailOnError().convention(true);
     }

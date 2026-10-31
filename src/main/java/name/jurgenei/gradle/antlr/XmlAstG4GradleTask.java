@@ -1,4 +1,4 @@
-package name.jurgenei.gradle.antlr;
+package org.flowdigger.gradle.antlr;
 
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.work.DisableCachingByDefault;
@@ -17,8 +17,8 @@ public abstract class XmlAstG4GradleTask extends XmlAstGradleTask {
         super(objects);
         LanguageTaskDefaults.of(
                 "antlr4",
-                "name.jurgenei.parsers.ANTLRv4Parser",
-                "name.jurgenei.parsers.ANTLRv4Lexer",
+                "org.flowdigger.parsers.ANTLRv4Parser",
+                "org.flowdigger.parsers.ANTLRv4Lexer",
                 "grammarSpec",
                 List.of("**/*.g4"))
             .applyTo(this);

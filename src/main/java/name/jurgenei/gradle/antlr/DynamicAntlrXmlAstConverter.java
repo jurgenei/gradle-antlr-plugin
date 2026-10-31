@@ -1,8 +1,8 @@
-package name.jurgenei.gradle.antlr;
+package org.flowdigger.gradle.antlr;
 
-import name.jurgenei.gradle.antlr.constants.GrammarConstants;
-import name.jurgenei.gradle.antlr.constants.TimeConstants;
-import name.jurgenei.xir.XirSerializer;
+import org.flowdigger.gradle.antlr.constants.GrammarConstants;
+import org.flowdigger.gradle.antlr.constants.TimeConstants;
+import org.flowdigger.xir.XirSerializer;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;

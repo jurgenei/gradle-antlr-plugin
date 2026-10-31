@@ -1,16 +1,16 @@
-package name.jurgenei.gradle.xml;
+package org.flowdigger.gradle.xml;
 
-import name.jurgenei.ast.core.model.ChoiceNode;
-import name.jurgenei.ast.core.model.GrammarModel;
-import name.jurgenei.ast.core.model.GrammarNode;
-import name.jurgenei.ast.core.model.GrammarRule;
-import name.jurgenei.ast.core.model.LabelNode;
-import name.jurgenei.ast.core.model.LiteralNode;
-import name.jurgenei.ast.core.model.OptionalNode;
-import name.jurgenei.ast.core.model.Repeat1Node;
-import name.jurgenei.ast.core.model.RepeatNode;
-import name.jurgenei.ast.core.model.RuleRefNode;
-import name.jurgenei.ast.core.model.SequenceNode;
+import org.flowdigger.ast.core.model.ChoiceNode;
+import org.flowdigger.ast.core.model.GrammarModel;
+import org.flowdigger.ast.core.model.GrammarNode;
+import org.flowdigger.ast.core.model.GrammarRule;
+import org.flowdigger.ast.core.model.LabelNode;
+import org.flowdigger.ast.core.model.LiteralNode;
+import org.flowdigger.ast.core.model.OptionalNode;
+import org.flowdigger.ast.core.model.Repeat1Node;
+import org.flowdigger.ast.core.model.RepeatNode;
+import org.flowdigger.ast.core.model.RuleRefNode;
+import org.flowdigger.ast.core.model.SequenceNode;
 
 /**
  * Writes GrammarModel into compact S-expression format.

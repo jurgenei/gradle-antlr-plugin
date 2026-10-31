@@ -1,11 +1,11 @@
-package name.jurgenei.gradle.xml;
+package org.flowdigger.gradle.xml;
 
-import name.jurgenei.ast.core.AstClassDeriver;
-import name.jurgenei.ast.core.model.AstInheritance;
-import name.jurgenei.ast.core.model.AstRelation;
-import name.jurgenei.ast.core.model.Cardinality;
-import name.jurgenei.ast.core.model.GrammarModel;
-import name.jurgenei.ast.core.model.RelationKind;
+import org.flowdigger.ast.core.AstClassDeriver;
+import org.flowdigger.ast.core.model.AstInheritance;
+import org.flowdigger.ast.core.model.AstRelation;
+import org.flowdigger.ast.core.model.Cardinality;
+import org.flowdigger.ast.core.model.GrammarModel;
+import org.flowdigger.ast.core.model.RelationKind;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -27,8 +27,8 @@ public class G4GrammarModelMapperTest {
 
         final GrammarModel model = new G4GrammarModelMapper().map(
                 grammarFile,
-                "name.jurgenei.parsers.ANTLRv4Lexer",
-                "name.jurgenei.parsers.ANTLRv4Parser",
+                "org.flowdigger.parsers.ANTLRv4Lexer",
+                "org.flowdigger.parsers.ANTLRv4Parser",
                 "grammarSpec",
                 getClass().getClassLoader());
 

@@ -1,4 +1,4 @@
-package name.jurgenei.gradle.antlr;
+package org.flowdigger.gradle.antlr;
 
 import com.sun.net.httpserver.HttpServer;
 import org.gradle.testkit.runner.BuildResult;
@@ -26,7 +26,7 @@ public class XmlAstPluginFunctionalTest {
         writeBuildFile(projectDir, """
                 plugins {
                     id 'java'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
                 """);
 
@@ -42,7 +42,7 @@ public class XmlAstPluginFunctionalTest {
         writeBuildFile(projectDir, """
                 plugins {
                     id 'java'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
                 """);
 
@@ -57,12 +57,12 @@ public class XmlAstPluginFunctionalTest {
         final File projectDir = temporaryFolder.newFolder("functional-custom-types");
         writeSettings(projectDir);
         writeBuildFile(projectDir, """
-                import name.jurgenei.gradle.antlr.XmlAstTask
-                import name.jurgenei.gradle.antlr.XmlAstGradleTask
+                import org.flowdigger.gradle.antlr.XmlAstTask
+                import org.flowdigger.gradle.antlr.XmlAstGradleTask
 
                 plugins {
                     id 'java'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
 
                 tasks.register('legacyXmlast', XmlAstTask) {
@@ -91,7 +91,7 @@ public class XmlAstPluginFunctionalTest {
                 plugins {
                     id 'java'
                     id 'antlr'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
 
                 repositories {
@@ -107,7 +107,7 @@ public class XmlAstPluginFunctionalTest {
                     arguments += ['-package', 'e2e']
                 }
 
-                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                tasks.named('xmlast', org.flowdigger.gradle.antlr.XmlAstGradleTask) {
                     sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
                     destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
                     parserClassName.set('e2e.MiniParser')
@@ -156,7 +156,7 @@ public class XmlAstPluginFunctionalTest {
                 plugins {
                     id 'java'
                     id 'antlr'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
 
                 repositories {
@@ -172,7 +172,7 @@ public class XmlAstPluginFunctionalTest {
                     arguments += ['-package', 'e2e']
                 }
 
-                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                tasks.named('xmlast', org.flowdigger.gradle.antlr.XmlAstGradleTask) {
                     sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
                     destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
                     parserClassName.set('e2e.MiniParser')
@@ -224,7 +224,7 @@ public class XmlAstPluginFunctionalTest {
                 plugins {
                     id 'java'
                     id 'antlr'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
 
                 repositories {
@@ -240,7 +240,7 @@ public class XmlAstPluginFunctionalTest {
                     arguments += ['-package', 'e2e']
                 }
 
-                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                tasks.named('xmlast', org.flowdigger.gradle.antlr.XmlAstGradleTask) {
                     sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
                     destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
                     parserClassName.set('e2e.MiniParser')
@@ -289,7 +289,7 @@ public class XmlAstPluginFunctionalTest {
                 plugins {
                     id 'java'
                     id 'antlr'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
 
                 repositories {
@@ -305,7 +305,7 @@ public class XmlAstPluginFunctionalTest {
                     arguments += ['-package', 'e2e']
                 }
 
-                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                tasks.named('xmlast', org.flowdigger.gradle.antlr.XmlAstGradleTask) {
                     sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
                     destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
                     parserClassName.set('e2e.MiniParser')
@@ -350,7 +350,7 @@ public class XmlAstPluginFunctionalTest {
                 plugins {
                     id 'java'
                     id 'antlr'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
 
                 repositories {
@@ -366,7 +366,7 @@ public class XmlAstPluginFunctionalTest {
                     arguments += ['-package', 'e2e']
                 }
 
-                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                tasks.named('xmlast', org.flowdigger.gradle.antlr.XmlAstGradleTask) {
                     sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
                     destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
                     parserClassName.set('e2e.MiniParser')
@@ -411,7 +411,7 @@ public class XmlAstPluginFunctionalTest {
                 plugins {
                     id 'java'
                     id 'antlr'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
 
                 repositories {
@@ -427,7 +427,7 @@ public class XmlAstPluginFunctionalTest {
                     arguments += ['-package', 'e2e']
                 }
 
-                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                tasks.named('xmlast', org.flowdigger.gradle.antlr.XmlAstGradleTask) {
                     sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
                     destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
                     parserClassName.set('e2e.MiniParser')
@@ -481,7 +481,7 @@ public class XmlAstPluginFunctionalTest {
         writeBuildFile(projectDir, """
                 plugins {
                     id 'java'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
 
                 repositories {
@@ -493,7 +493,7 @@ public class XmlAstPluginFunctionalTest {
                     implementation 'org.antlr:antlr4-runtime:4.13.1'
                 }
 
-                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                tasks.named('xmlast', org.flowdigger.gradle.antlr.XmlAstGradleTask) {
                     sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
                     destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
                     catalogFile.set(layout.projectDirectory.file('catalog.xml'))
@@ -584,7 +584,7 @@ public class XmlAstPluginFunctionalTest {
                 plugins {
                     id 'java'
                     id 'antlr'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
 
                 repositories {
@@ -600,7 +600,7 @@ public class XmlAstPluginFunctionalTest {
                     arguments += ['-package', 'e2e']
                 }
 
-                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                tasks.named('xmlast', org.flowdigger.gradle.antlr.XmlAstGradleTask) {
                     sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
                     destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
                     parserClassName.set('e2e.MiniParser')
@@ -653,7 +653,7 @@ public class XmlAstPluginFunctionalTest {
                 plugins {
                     id 'java'
                     id 'antlr'
-                    id 'name.jurgenei.gradle.antlr'
+                    id 'org.flowdigger.gradle.antlr'
                 }
 
                 repositories {
@@ -669,7 +669,7 @@ public class XmlAstPluginFunctionalTest {
                     arguments += ['-package', 'e2e']
                 }
 
-                tasks.named('xmlast', name.jurgenei.gradle.antlr.XmlAstGradleTask) {
+                tasks.named('xmlast', org.flowdigger.gradle.antlr.XmlAstGradleTask) {
                     sourceDirectory.set(layout.projectDirectory.dir('src/main/sql'))
                     destinationDirectory.set(layout.projectDirectory.dir('build/xmlast'))
                     parserClassName.set('e2e.MiniParser')

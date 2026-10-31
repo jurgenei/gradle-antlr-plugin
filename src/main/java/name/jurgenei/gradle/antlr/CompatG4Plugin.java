@@ -1,11 +1,11 @@
-package name.jurgenei.gradle.antlr;
+package org.flowdigger.gradle.antlr;
 
-import name.jurgenei.gradle.xml.G4toSchemaTask;
+import org.flowdigger.gradle.xml.G4toSchemaTask;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 
 /**
- * Compatibility plugin for legacy id {@code name.jurgenei.gradle.antlr.g4}.
+ * Compatibility plugin for legacy id {@code org.flowdigger.gradle.antlr.g4}.
  */
 @SuppressWarnings("unused")
 public final class CompatG4Plugin implements Plugin<Project> {

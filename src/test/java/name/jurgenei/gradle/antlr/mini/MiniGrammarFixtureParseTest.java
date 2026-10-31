@@ -1,4 +1,4 @@
-package name.jurgenei.gradle.antlr.mini;
+package org.flowdigger.gradle.antlr.mini;
 
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStream;

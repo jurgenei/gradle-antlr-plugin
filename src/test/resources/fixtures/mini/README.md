@@ -13,4 +13,3 @@ These fixtures target:
 - `invalid/`: inputs expected to fail parsing
 
 All keyword tokens are uppercase because `MiniLexer` defines explicit uppercase keyword rules.
-

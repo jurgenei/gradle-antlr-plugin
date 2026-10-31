@@ -2,7 +2,6 @@
 
 ![Conformance](https://img.shields.io/badge/Conformance-Check--All%20Passing-brightgreen)
 
-[![Plugin Portal](https://img.shields.io/gradle-plugin-portal/v/name.flowdigger.gradle.antlr?label=Plugin%20Portal)](https://plugins.gradle.org/plugin/name.flowdigger.gradle.antlr)
 [![Build and Test](https://github.com/flowdigger/gradle-antlr-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/flowdigger/gradle-antlr-plugin/actions/workflows/ci.yml)
 [![JUnit Report](https://img.shields.io/badge/JUnit-Report-blue?logo=githubactions)](https://github.com/flowdigger/gradle-antlr-plugin/actions/workflows/ci.yml)
 [![Coverage CI](https://github.com/flowdigger/gradle-antlr-plugin/actions/workflows/coverage.yml/badge.svg)](https://github.com/flowdigger/gradle-antlr-plugin/actions/workflows/coverage.yml)

@@ -4,7 +4,7 @@ def xirG4Build = file('../xir-g4')
 if (xirG4Build.isDirectory()) {
 	includeBuild('../xir-g4') {
 		dependencySubstitution {
-			substitute module('name.jurgenei:xir-g4') using project(':')
+			substitute module('org.flowdigger:xir-g4') using project(':')
 		}
 	}
 }

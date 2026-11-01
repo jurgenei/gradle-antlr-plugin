@@ -11,7 +11,7 @@ plugins {
 }
 
 group = "org.flowdigger.gradle"
-version = '0.1.11'
+version = '1.0.0'
 
 ext {
     spotbugsEngineVersion = '4.8.6'
@@ -31,8 +31,8 @@ repositories {
 
 dependencies {
     implementation 'org.antlr:antlr4-runtime:4.13.1'
-    implementation 'name.jurgenei:xir-sax:0.1.4'
-    implementation 'name.jurgenei:xir-g4:0.1.0'
+    implementation 'org.flowdigger:xir-sax:1.0.0'
+    implementation 'org.flowdigger:xir-g4:1.0.0'
 
     antlr 'org.antlr:antlr4:4.13.1'
 

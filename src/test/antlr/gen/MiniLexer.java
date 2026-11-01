@@ -1,6 +1,6 @@
 // Generated from /Users/cs79en/Developer/GitHub/gradle-antlr-plugin/src/test/antlr/MiniLexer.g4 by ANTLR 4.13.2
 
-package name.jurgenei.gradle.antlr.mini;
+package org.flowdigger.gradle.antlr.mini;
 
 import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.CharStream;
